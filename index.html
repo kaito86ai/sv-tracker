@@ -177,7 +177,12 @@
                   <label class="text-xs font-medium text-gray-300">
                     相手のデッキ名 (ワンタップ選択または直接入力)
                   </label>
-                  <span class="text-[11px] text-gray-400">※ このシーズンで遭遇したデッキが優先表示されます</span>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[11px] text-gray-400 hidden sm:inline">※ [×] で不要な候補を即削除できます</span>
+                    <button type="button" id="btn-quick-manage-opp-decks" class="text-xs text-cyan-400 hover:underline flex items-center gap-1">
+                      <i data-lucide="settings" class="w-3 h-3"></i> 相手デッキ一覧・整理
+                    </button>
+                  </div>
                 </div>
                 <!-- 候補サジェストタグ -->
                 <div id="opp-deck-suggestions" class="flex flex-wrap gap-1.5 mb-2.5 min-h-[28px]">
@@ -444,9 +449,23 @@
       </div>
     </section>
 
-    <!-- TAB 4: デッキ管理＆スタン落ち -->
-    <section id="tab-decks" class="tab-content hidden">
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- TAB 4: デッキ管理＆スタン落ち＆相手デッキ整理 -->
+    <section id="tab-decks" class="tab-content hidden space-y-5">
+
+      <!-- Deck Tab Sub-navigation (My Decks vs Opponent Decks) -->
+      <div class="flex items-center gap-2 border-b border-[#232c3f] pb-3">
+        <button type="button" id="subtab-my-decks" class="px-4 py-2 rounded-xl bg-cyan-600 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+          <span>自分のデッキ管理</span>
+        </button>
+        <button type="button" id="subtab-opp-decks" class="px-4 py-2 rounded-xl bg-[#182030] hover:bg-[#20293d] border border-[#2b3548] text-gray-300 font-medium text-xs flex items-center gap-2 transition">
+          <i data-lucide="swords" class="w-4 h-4 text-rose-400"></i>
+          <span>対戦相手のデッキ名管理・削除</span>
+        </button>
+      </div>
+
+      <!-- VIEW 1: 自分のデッキ管理 -->
+      <div id="subview-my-decks" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         <!-- 自デッキ登録カード -->
         <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl space-y-4">
@@ -523,6 +542,55 @@
         </div>
 
       </div>
+
+      <!-- VIEW 2: 対戦相手のデッキ名管理・削除 -->
+      <div id="subview-opp-decks" class="hidden bg-[#131926] border border-[#232c3f] rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+        <div class="flex flex-wrap items-center justify-between pb-3 border-b border-[#232c3f] gap-3">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="swords" class="w-5 h-5 text-rose-400"></i>
+              対戦相手のデッキ名 管理・削除
+            </h3>
+            <p class="text-xs text-gray-400 mt-0.5">
+              誤字した相手デッキ名や、候補から消したいデッキ名を削除・編集できます。
+            </p>
+          </div>
+          <!-- Class Filter for Opponent Decks -->
+          <div class="flex items-center gap-2">
+            <label class="text-xs font-semibold text-gray-400">クラス絞り込み:</label>
+            <select id="opp-deck-manage-class-filter" class="bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3 py-1.5 text-xs text-gray-100 font-medium focus:outline-none focus:ring-1 focus:ring-cyan-500">
+              <option value="ALL">全クラス</option>
+              <!-- JSで動的生成 -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Add Custom Opponent Deck Form -->
+        <div class="p-3.5 bg-[#182030] rounded-xl border border-[#283449] flex flex-wrap items-center gap-3">
+          <span class="text-xs font-bold text-gray-300 flex items-center gap-1">
+            <i data-lucide="plus-circle" class="w-3.5 h-3.5 text-cyan-400"></i>
+            相手デッキを手動追加:
+          </span>
+          <select id="add-opp-deck-class" class="bg-[#121824] border border-[#2e3a52] rounded-lg px-2.5 py-1.5 text-xs text-gray-100">
+            <!-- 各クラス -->
+          </select>
+          <input type="text" id="add-opp-deck-name" placeholder="新しい相手デッキ名 (例: 秘術ウィッチ)" 
+            class="flex-1 min-w-[200px] bg-[#121824] border border-[#2e3a52] rounded-lg px-3 py-1.5 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyan-500">
+          <button type="button" id="btn-add-opp-deck" class="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs transition">
+            追加
+          </button>
+        </div>
+
+        <!-- Opponent Decks List Grid -->
+        <div id="opp-decks-manage-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <!-- JSで動的展開 -->
+        </div>
+
+        <div id="opp-decks-empty-msg" class="text-center py-8 text-gray-500 text-xs hidden">
+          登録・遭遇した相手デッキはありません。
+        </div>
+      </div>
+
     </section>
 
   </main>
@@ -594,6 +662,120 @@
       <div class="flex justify-end gap-2 pt-2">
         <button type="button" id="btn-cancel-edit" class="px-4 py-2 rounded-xl bg-[#1b2333] text-gray-300 text-sm">キャンセル</button>
         <button type="button" id="btn-save-edit" class="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deck Insights & Notes Modal -->
+  <div id="deck-notes-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#131926] border border-[#2b3548] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-[#232c3f]">
+        <div class="flex items-center gap-2">
+          <i data-lucide="book-open" class="w-5 h-5 text-cyan-400"></i>
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span id="modal-deck-name">デッキ名</span>
+              <span id="modal-deck-class" class="px-2 py-0.5 rounded text-xs border">クラス</span>
+            </h3>
+            <p class="text-xs text-gray-400">デッキ専用の考察・立ち回り・マリガン・カード調整ノート</p>
+          </div>
+        </div>
+        <button id="btn-close-deck-notes-modal" class="text-gray-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="deck-notes-deck-id">
+
+      <!-- Navigation Tabs inside Deck Note -->
+      <div class="flex border-b border-[#232c3f] gap-3 text-xs">
+        <button type="button" class="deck-note-tab active pb-2 px-1 border-b-2 border-cyan-400 text-cyan-400 font-bold" data-target="dnote-all">
+          すべて表示
+        </button>
+        <button type="button" class="deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium" data-target="dnote-plan">
+          🎯 立ち回り
+        </button>
+        <button type="button" class="deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium" data-target="dnote-mulligan">
+          🃏 マリガン
+        </button>
+        <button type="button" class="deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium" data-target="dnote-cards">
+          ⚖️ 採用調整
+        </button>
+        <button type="button" class="deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium" data-target="dnote-review">
+          💡 感想・課題
+        </button>
+      </div>
+
+      <div class="space-y-4 pt-1">
+        <!-- 1. 立ち回り・ゲームプラン -->
+        <div id="section-dnote-plan" class="bg-[#182030] p-4 rounded-xl border border-[#273349] space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
+              <i data-lucide="target" class="w-4 h-4"></i>
+              基本立ち回り・ゲームプラン
+            </label>
+            <button type="button" class="quick-template-btn text-[11px] text-cyan-400 hover:underline" data-field="deck-note-plan" data-tpl="【序盤】\n【中盤】\n【リーサル設計】">
+              ＋ 定型枠を挿入
+            </button>
+          </div>
+          <textarea id="deck-note-plan" rows="3" placeholder="序盤のテンポの取り方、中盤の進化権の使い方、目指すリーサルターンや勝ち筋などを記録..."
+            class="w-full bg-[#121824] border border-[#2e3b52] rounded-xl p-3 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
+        </div>
+
+        <!-- 2. マリガン基準 -->
+        <div id="section-dnote-mulligan" class="bg-[#182030] p-4 rounded-xl border border-[#273349] space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+              <i data-lucide="layers" class="w-4 h-4"></i>
+              マリガン基準（先攻・後攻・セットキープ）
+            </label>
+            <button type="button" class="quick-template-btn text-[11px] text-amber-400 hover:underline" data-field="deck-note-mulligan" data-tpl="【共通キープ】\n【先攻キープ】\n【後攻キープ】\n【セットキープ】">
+              ＋ 定型枠を挿入
+            </button>
+          </div>
+          <textarea id="deck-note-mulligan" rows="3" placeholder="先攻キープカード、後攻キープカード、対面ごとの意識などを記録..."
+            class="w-full bg-[#121824] border border-[#2e3b52] rounded-xl p-3 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
+        </div>
+
+        <!-- 3. カード採用・枚数調整メモ -->
+        <div id="section-dnote-cards" class="bg-[#182030] p-4 rounded-xl border border-[#273349] space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+              <i data-lucide="sliders" class="w-4 h-4"></i>
+              カード採用・枚数調整の理由 (IN / OUT)
+            </label>
+            <button type="button" class="quick-template-btn text-[11px] text-emerald-400 hover:underline" data-field="deck-note-cards" data-tpl="【採用理由・枚数変更】\n・○○: 2枚→3枚 (理由: )\n【不採用・抜いたカード】\n・○○: (理由: )">
+              ＋ 定型枠を挿入
+            </button>
+          </div>
+          <textarea id="deck-note-cards" rows="3" placeholder="新カードを試した感想、2枚採用→3枚採用に変えた理由、環境に合わせたメタカード調整..."
+            class="w-full bg-[#121824] border border-[#2e3b52] rounded-xl p-3 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
+        </div>
+
+        <!-- 4. 総合感想・課題・メモ -->
+        <div id="section-dnote-review" class="bg-[#182030] p-4 rounded-xl border border-[#273349] space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-fuchsia-300 flex items-center gap-1.5">
+              <i data-lucide="sparkles" class="w-4 h-4"></i>
+              総合感想・使ってみての課題・肌感
+            </label>
+            <button type="button" class="quick-template-btn text-[11px] text-fuchsia-400 hover:underline" data-field="deck-note-review" data-tpl="【強い点・感触】\n【きつい対面・課題】\n【今後の改善案】">
+              ＋ 定型枠を挿入
+            </button>
+          </div>
+          <textarea id="deck-note-review" rows="3" placeholder="回してみて感じた課題、有利対面・不利対面の体感、改善アイデアなどを自由に記録..."
+            class="w-full bg-[#121824] border border-[#2e3b52] rounded-xl p-3 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between pt-3 border-t border-[#232c3f]">
+        <span class="text-[11px] text-gray-400">※ デッキごとに独立してブラウザに自動保存されます</span>
+        <div class="flex gap-2">
+          <button type="button" id="btn-cancel-deck-notes" class="px-4 py-2 rounded-xl bg-[#1b2333] text-gray-300 text-xs">キャンセル</button>
+          <button type="button" id="btn-save-deck-notes" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition">
+            考察ノートを保存
+          </button>
+        </div>
       </div>
     </div>
   </div>

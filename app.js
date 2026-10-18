@@ -1,4 +1,4 @@
-// Shadowverse Battle Analyzer - Main Logic (with Seasons & Card Rotation Support)
+// Shadowverse Battle Analyzer - Main Logic (with Seasons, Card Rotation, Deck Insights & Opponent Deck Management)
 
 // Storage Keys
 const STORAGE_SEASONS_KEY = 'sv_analyzer_seasons_v2';
@@ -6,6 +6,8 @@ const STORAGE_CURRENT_SEASON_KEY = 'sv_analyzer_current_season_v2';
 const STORAGE_DECKS_KEY = 'sv_analyzer_decks_v2';
 const STORAGE_MATCHES_KEY = 'sv_analyzer_matches_v2';
 const STORAGE_LAST_DECK_KEY = 'sv_analyzer_last_deck_v2';
+const STORAGE_DELETED_OPP_DECKS_KEY = 'sv_analyzer_deleted_opp_decks_v2';
+const STORAGE_CUSTOM_OPP_DECKS_KEY = 'sv_analyzer_custom_opp_decks_v2';
 
 // SV Classes Definition
 const SV_CLASSES = [
@@ -25,12 +27,59 @@ const DEFAULT_SEASONS = [
   { id: 'season-current', name: '現環境 (Season 1 / 最新弾)', createdAt: Date.now() - 3600000 * 24 * 30 }
 ];
 
-// Default Decks
+// Default Decks with Insights Structure
 const DEFAULT_MY_DECKS = [
-  { id: 'deck-1', name: '進化ロイヤル', class: 'ロイヤル', status: 'active', notes: 'カゲミツ・オクトー軸。新弾でも現役', createdAt: Date.now() - 3600000 * 24 * 10 },
-  { id: 'deck-2', name: '秘術ウィッチ', class: 'ウィッチ', status: 'active', notes: 'ノーマン・パメラ軸', createdAt: Date.now() - 3600000 * 24 * 5 },
-  { id: 'deck-3', name: 'マガキエルフ', class: 'エルフ', status: 'active', notes: 'バウンス打点管理', createdAt: Date.now() - 3600000 * 24 * 3 },
-  { id: 'deck-4', name: '旧・結晶ビショップ', class: 'ビショップ', status: 'archived', notes: '【スタン落ち】スカルフェイン落ちのため保管庫へ', createdAt: Date.now() - 3600000 * 24 * 40 }
+  { 
+    id: 'deck-1', 
+    name: '進化ロイヤル', 
+    class: 'ロイヤル', 
+    status: 'active', 
+    notes: 'カゲミツ・オクトー軸。新弾でも現役', 
+    insights: {
+      plan: '【序盤】2Tフォロワーから連携を稼ぐ。\n【中盤】5T目カゲミツ進化で盤面を制圧し、進化回数を稼ぐ。\n【リーサル】7〜8T目にオクトーと疾走フォロワーで一気に20点削り切る。',
+      mulligan: '【共通】2コスフォロワー最優先確保\n【先攻】テンポ重視で1・2・3の動きをキープ\n【後攻】除去札・進化時多面処理できるフォロワーを単キープ',
+      cards: '【採用調整】\n・低コスト除去スペル: 2枚→3枚 (アグロ対面への回答)\n・重いフィニッシャー: 3枚→2枚 (手札事故防止)',
+      review: '先攻時の安定感は非常に高いが、後攻でアグロ相手に押し切られる試合があった。序盤の受け札をもう少し厚くするか要検討。'
+    },
+    createdAt: Date.now() - 3600000 * 24 * 10 
+  },
+  { 
+    id: 'deck-2', 
+    name: '秘術ウィッチ', 
+    class: 'ウィッチ', 
+    status: 'active', 
+    notes: 'ノーマン・パメラ軸', 
+    insights: {
+      plan: '【序盤】土の印を供給しつつ手札を整える。\n【中盤】スタック数を管理しながらノーマン等の守護で受ける。\n【リーサル】紅蓮の魔術＋パメラの打点でバーストダメージ。',
+      mulligan: '【共通】土の魔導士・印供給カード\n【先攻】マナリアの秘術\n【後攻】盤面干渉札',
+      cards: '・新カード採用で打点力アップ。守護貫通の手段が課題。',
+      review: '守護ビショップ対面で打点が届かない場面があった。変成等の消滅・除去札の枚数を増やすべきか。'
+    },
+    createdAt: Date.now() - 3600000 * 24 * 5 
+  },
+  { 
+    id: 'deck-3', 
+    name: 'マガキエルフ', 
+    class: 'エルフ', 
+    status: 'active', 
+    notes: 'バウンス打点管理', 
+    insights: { plan: '', mulligan: '', cards: '', review: '' },
+    createdAt: Date.now() - 3600000 * 24 * 3 
+  },
+  { 
+    id: 'deck-4', 
+    name: '旧・結晶ビショップ', 
+    class: 'ビショップ', 
+    status: 'archived', 
+    notes: '【スタン落ち】スカルフェイン落ちのため保管庫へ', 
+    insights: {
+      plan: '結晶5回達成でスカルフェイン早期着地',
+      mulligan: 'スカルフェイン全力マリガン',
+      cards: 'スタン落ちのため現行ローテでは使用不可',
+      review: '前環境最強の一角だったがキーカードがスタン落ちしたため保管庫へ移行。'
+    },
+    createdAt: Date.now() - 3600000 * 24 * 40 
+  }
 ];
 
 // App State
@@ -38,10 +87,14 @@ let seasons = [];
 let currentSeasonId = '';
 let myDecks = [];
 let matches = [];
+let deletedOppDecks = []; // Array of "ClassName___DeckName"
+let customOppDecks = [];  // Array of { class: 'ロイヤル', name: 'xxx' }
 let selectedTurn = '先攻';
 let selectedResult = 'WIN';
 let selectedOppClass = 'ロイヤル';
 let deckTabFilter = 'active'; // 'active' or 'archived'
+let deckSubtab = 'my-decks';  // 'my-decks' or 'opp-decks'
+let oppDeckManageClassFilter = 'ALL';
 let shareChartInstance = null;
 let winrateChartInstance = null;
 
@@ -53,6 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFormHandlers();
   setupTabNavigation();
   setupSeasonManagement();
+  setupDeckNotesManagement();
+  setupOppDeckManagement();
   setupFiltersAndSearch();
   setupDataManagement();
   setupQuickMemoTags();
@@ -76,21 +131,27 @@ function loadData() {
     saveSeasons();
   }
 
-  // Current Season
   currentSeasonId = localStorage.getItem(STORAGE_CURRENT_SEASON_KEY);
   if (!currentSeasonId || !seasons.some(s => s.id === currentSeasonId)) {
     currentSeasonId = seasons[0].id;
     localStorage.setItem(STORAGE_CURRENT_SEASON_KEY, currentSeasonId);
   }
 
-  // 2. Decks (handle legacy format migration)
+  // 2. Decks
   const savedDecks = localStorage.getItem(STORAGE_DECKS_KEY) || localStorage.getItem('sv_analyzer_decks_v1');
   if (savedDecks) {
     try {
       myDecks = JSON.parse(savedDecks).map(d => ({
         status: 'active',
         notes: '',
-        ...d
+        insights: { plan: '', mulligan: '', cards: '', review: '' },
+        ...d,
+        insights: {
+          plan: d.insights?.plan || '',
+          mulligan: d.insights?.mulligan || '',
+          cards: d.insights?.cards || '',
+          review: d.insights?.review || ''
+        }
       }));
     } catch (e) {
       myDecks = [...DEFAULT_MY_DECKS];
@@ -112,6 +173,25 @@ function loadData() {
       matches = [];
     }
   }
+
+  // 4. Deleted and Custom Opponent Decks
+  const savedDeletedOppDecks = localStorage.getItem(STORAGE_DELETED_OPP_DECKS_KEY);
+  if (savedDeletedOppDecks) {
+    try {
+      deletedOppDecks = JSON.parse(savedDeletedOppDecks);
+    } catch (e) {
+      deletedOppDecks = [];
+    }
+  }
+
+  const savedCustomOppDecks = localStorage.getItem(STORAGE_CUSTOM_OPP_DECKS_KEY);
+  if (savedCustomOppDecks) {
+    try {
+      customOppDecks = JSON.parse(savedCustomOppDecks);
+    } catch (e) {
+      customOppDecks = [];
+    }
+  }
 }
 
 function saveSeasons() {
@@ -126,30 +206,32 @@ function saveMatches() {
   localStorage.setItem(STORAGE_MATCHES_KEY, JSON.stringify(matches));
 }
 
+function saveDeletedOppDecks() {
+  localStorage.setItem(STORAGE_DELETED_OPP_DECKS_KEY, JSON.stringify(deletedOppDecks));
+}
+
+function saveCustomOppDecks() {
+  localStorage.setItem(STORAGE_CUSTOM_OPP_DECKS_KEY, JSON.stringify(customOppDecks));
+}
+
 // Season Management Setup
 function setupSeasonManagement() {
   const globalSelect = document.getElementById('global-season-select');
   const analyticsSeasonFilter = document.getElementById('analytics-season-filter');
   const historySeasonFilter = document.getElementById('history-filter-season');
 
-  // Change active global season
   globalSelect.addEventListener('change', () => {
     currentSeasonId = globalSelect.value;
     localStorage.setItem(STORAGE_CURRENT_SEASON_KEY, currentSeasonId);
-    
-    // Also sync analytics season filter if it was tracking current
     analyticsSeasonFilter.value = currentSeasonId;
-    
     renderAll();
     lucide.createIcons();
   });
 
-  // Analytics season filter change
   analyticsSeasonFilter.addEventListener('change', () => {
     renderAnalytics();
   });
 
-  // History season filter change
   historySeasonFilter.addEventListener('change', () => {
     renderHistory();
   });
@@ -161,21 +243,10 @@ function setupSeasonManagement() {
   const btnCancelNewSeason = document.getElementById('btn-cancel-new-season');
   const btnConfirmNewSeason = document.getElementById('btn-confirm-new-season');
 
-  btnOpenNewSeason.addEventListener('click', () => {
-    openNewSeasonModal();
-  });
-
-  btnCloseNewSeasonModal.addEventListener('click', () => {
-    newSeasonModal.classList.add('hidden');
-  });
-
-  btnCancelNewSeason.addEventListener('click', () => {
-    newSeasonModal.classList.add('hidden');
-  });
-
-  btnConfirmNewSeason.addEventListener('click', () => {
-    handleCreateNewSeason();
-  });
+  btnOpenNewSeason.addEventListener('click', openNewSeasonModal);
+  btnCloseNewSeasonModal.addEventListener('click', () => newSeasonModal.classList.add('hidden'));
+  btnCancelNewSeason.addEventListener('click', () => newSeasonModal.classList.add('hidden'));
+  btnConfirmNewSeason.addEventListener('click', handleCreateNewSeason);
 }
 
 function openNewSeasonModal() {
@@ -183,7 +254,6 @@ function openNewSeasonModal() {
   const nameInput = document.getElementById('new-season-name-input');
   nameInput.value = '';
 
-  // Render active decks checkbox list for transition
   const container = document.getElementById('season-transition-decks-list');
   container.innerHTML = '';
 
@@ -244,16 +314,7 @@ function handleCreateNewSeason() {
   saveSeasons();
   localStorage.setItem(STORAGE_CURRENT_SEASON_KEY, currentSeasonId);
 
-  // Process deck transitions (active vs archived)
   const checkboxes = document.querySelectorAll('.deck-transition-checkbox');
-  const keptDeckIds = new Set();
-  checkboxes.forEach(cb => {
-    if (cb.checked) {
-      keptDeckIds.add(cb.value);
-    }
-  });
-
-  // Archive decks not kept
   checkboxes.forEach(cb => {
     if (!cb.checked) {
       const d = myDecks.find(deck => deck.id === cb.value);
@@ -274,6 +335,385 @@ function handleCreateNewSeason() {
   alert(`新シーズン「${name}」を開始しました！\n使えなくなったデッキは「スタン落ち・保管庫」に整理されました。`);
 }
 
+// Deck Notes (Insights) Management Setup
+function setupDeckNotesManagement() {
+  const modal = document.getElementById('deck-notes-modal');
+  const btnClose = document.getElementById('btn-close-deck-notes-modal');
+  const btnCancel = document.getElementById('btn-cancel-deck-notes');
+  const btnSave = document.getElementById('btn-save-deck-notes');
+
+  btnClose.addEventListener('click', () => modal.classList.add('hidden'));
+  btnCancel.addEventListener('click', () => modal.classList.add('hidden'));
+
+  btnSave.addEventListener('click', () => {
+    const deckId = document.getElementById('deck-notes-deck-id').value;
+    const deck = myDecks.find(d => d.id === deckId);
+    if (!deck) return;
+
+    if (!deck.insights) {
+      deck.insights = {};
+    }
+
+    deck.insights.plan = document.getElementById('deck-note-plan').value.trim();
+    deck.insights.mulligan = document.getElementById('deck-note-mulligan').value.trim();
+    deck.insights.cards = document.getElementById('deck-note-cards').value.trim();
+    deck.insights.review = document.getElementById('deck-note-review').value.trim();
+
+    saveDecks();
+    modal.classList.add('hidden');
+    renderCurrentDeckSummary();
+    renderDecksList();
+    lucide.createIcons();
+
+    alert(`「${deck.name}」の考察ノートを保存しました！`);
+  });
+
+  document.querySelectorAll('.deck-note-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.deck-note-tab').forEach(t => {
+        t.className = 'deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium';
+      });
+      tab.className = 'deck-note-tab active pb-2 px-1 border-b-2 border-cyan-400 text-cyan-400 font-bold';
+
+      const target = tab.dataset.target;
+      const sections = ['plan', 'mulligan', 'cards', 'review'];
+      
+      if (target === 'dnote-all') {
+        sections.forEach(s => {
+          document.getElementById(`section-dnote-${s}`).classList.remove('hidden');
+        });
+      } else {
+        sections.forEach(s => {
+          const el = document.getElementById(`section-dnote-${s}`);
+          if (`dnote-${s}` === target) {
+            el.classList.remove('hidden');
+          } else {
+            el.classList.add('hidden');
+          }
+        });
+      }
+    });
+  });
+
+  document.querySelectorAll('.quick-template-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const fieldId = btn.dataset.field;
+      const tpl = btn.dataset.tpl.replace(/\\n/g, '\n');
+      const textarea = document.getElementById(fieldId);
+      if (textarea.value) {
+        textarea.value += '\n\n' + tpl;
+      } else {
+        textarea.value = tpl;
+      }
+      textarea.focus();
+    });
+  });
+}
+
+function openDeckNotesModal(deckId) {
+  const deck = myDecks.find(d => d.id === deckId);
+  if (!deck) return;
+
+  const modal = document.getElementById('deck-notes-modal');
+  document.getElementById('deck-notes-deck-id').value = deck.id;
+  document.getElementById('modal-deck-name').textContent = deck.name;
+  
+  const classBadge = document.getElementById('modal-deck-class');
+  classBadge.textContent = deck.class;
+  classBadge.className = `px-2 py-0.5 rounded text-xs border ${getClassBadge(deck.class)}`;
+
+  const insights = deck.insights || {};
+  document.getElementById('deck-note-plan').value = insights.plan || '';
+  document.getElementById('deck-note-mulligan').value = insights.mulligan || '';
+  document.getElementById('deck-note-cards').value = insights.cards || '';
+  document.getElementById('deck-note-review').value = insights.review || '';
+
+  document.querySelectorAll('.deck-note-tab').forEach((t, idx) => {
+    if (idx === 0) {
+      t.className = 'deck-note-tab active pb-2 px-1 border-b-2 border-cyan-400 text-cyan-400 font-bold';
+    } else {
+      t.className = 'deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium';
+    }
+  });
+  ['plan', 'mulligan', 'cards', 'review'].forEach(s => {
+    document.getElementById(`section-dnote-${s}`).classList.remove('hidden');
+  });
+
+  modal.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+// Opponent Deck Management Setup
+function setupOppDeckManagement() {
+  const subtabMyDecks = document.getElementById('subtab-my-decks');
+  const subtabOppDecks = document.getElementById('subtab-opp-decks');
+  const subviewMyDecks = document.getElementById('subview-my-decks');
+  const subviewOppDecks = document.getElementById('subview-opp-decks');
+
+  subtabMyDecks.addEventListener('click', () => {
+    deckSubtab = 'my-decks';
+    subtabMyDecks.className = 'px-4 py-2 rounded-xl bg-cyan-600 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition';
+    subtabOppDecks.className = 'px-4 py-2 rounded-xl bg-[#182030] hover:bg-[#20293d] border border-[#2b3548] text-gray-300 font-medium text-xs flex items-center gap-2 transition';
+    subviewMyDecks.classList.remove('hidden');
+    subviewOppDecks.classList.add('hidden');
+  });
+
+  subtabOppDecks.addEventListener('click', () => {
+    deckSubtab = 'opp-decks';
+    subtabOppDecks.className = 'px-4 py-2 rounded-xl bg-cyan-600 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition';
+    subtabMyDecks.className = 'px-4 py-2 rounded-xl bg-[#182030] hover:bg-[#20293d] border border-[#2b3548] text-gray-300 font-medium text-xs flex items-center gap-2 transition';
+    subviewMyDecks.classList.add('hidden');
+    subviewOppDecks.classList.remove('hidden');
+    renderOppDecksManagement();
+  });
+
+  // Quick link from record tab
+  document.getElementById('btn-quick-manage-opp-decks').addEventListener('click', () => {
+    switchTab('tab-decks');
+    subtabOppDecks.click();
+    document.getElementById('opp-deck-manage-class-filter').value = selectedOppClass;
+    oppDeckManageClassFilter = selectedOppClass;
+    renderOppDecksManagement();
+  });
+
+  // Populate Add Opp Deck Class dropdown & Filter
+  const addClassSelect = document.getElementById('add-opp-deck-class');
+  const filterSelect = document.getElementById('opp-deck-manage-class-filter');
+  addClassSelect.innerHTML = '';
+  filterSelect.innerHTML = '<option value="ALL">全クラス</option>';
+
+  SV_CLASSES.forEach(cls => {
+    const opt1 = document.createElement('option');
+    opt1.value = cls.id;
+    opt1.textContent = `${cls.name} (${cls.en})`;
+    addClassSelect.appendChild(opt1);
+
+    const opt2 = document.createElement('option');
+    opt2.value = cls.id;
+    opt2.textContent = cls.name;
+    filterSelect.appendChild(opt2);
+  });
+
+  filterSelect.addEventListener('change', () => {
+    oppDeckManageClassFilter = filterSelect.value;
+    renderOppDecksManagement();
+  });
+
+  // Add custom opponent deck
+  document.getElementById('btn-add-opp-deck').addEventListener('click', () => {
+    const cls = addClassSelect.value;
+    const nameInput = document.getElementById('add-opp-deck-name');
+    const name = nameInput.value.trim();
+    if (!name) return;
+
+    // Un-delete if previously deleted
+    const key = `${cls}___${name}`;
+    deletedOppDecks = deletedOppDecks.filter(k => k !== key);
+    saveDeletedOppDecks();
+
+    if (!customOppDecks.some(d => d.class === cls && d.name === name)) {
+      customOppDecks.unshift({ class: cls, name: name });
+      saveCustomOppDecks();
+    }
+
+    nameInput.value = '';
+    renderAll();
+    lucide.createIcons();
+    alert(`相手デッキ「[${cls}] ${name}」を候補に追加しました！`);
+  });
+}
+
+// Render Opponent Decks Management Grid in Tab 4
+function renderOppDecksManagement() {
+  const container = document.getElementById('opp-decks-manage-grid');
+  const emptyMsg = document.getElementById('opp-decks-empty-msg');
+  container.innerHTML = '';
+
+  // Collect all known opponent decks across all classes
+  const oppDeckMap = {}; // key: "ClassName___DeckName" -> { class, name, count }
+
+  // 1. From default suggestions
+  const defaults = {
+    'エルフ': ['マガキエルフ', 'カステルエルフ', 'テンポエルフ', 'リノエルフ'],
+    'ロイヤル': ['進化ロイヤル', '連携ロイヤル', '財宝ロイヤル', '指揮官ロイヤル'],
+    'ウィッチ': ['秘術ウィッチ', 'スペルウィッチ', 'マナリアウィッチ', 'チェスウィッチ'],
+    'ドラゴン': ['ランプドラゴン', 'バフドラゴン', '武装ドラゴン', 'ディスカードドラゴン'],
+    'ネクロマンサー': ['ラストワードネクロ', 'ゴーストネクロ', '葬送ネクロ', '進化ネクロ'],
+    'ヴァンパイア': ['狂乱ヴァンパイア', '復讐ヴァンパイア', '進化ヴァンパイア', 'ハンドレスヴァンパイア'],
+    'ビショップ': ['結晶ビショップ', 'エルヴィーラビショップ', '守護ビショップ', '消滅ビショップ'],
+    'ネメシス': ['機械ネメシス', 'アーティファクトネメシス', '進化ネメシス', '人形ネメシス'],
+    'ナイトメア': ['アグロナイトメア', 'ミッドレンジナイトメア', 'コントロールナイトメア']
+  };
+
+  Object.entries(defaults).forEach(([cls, list]) => {
+    list.forEach(name => {
+      const key = `${cls}___${name}`;
+      if (!deletedOppDecks.includes(key)) {
+        oppDeckMap[key] = { class: cls, name: name, count: 0 };
+      }
+    });
+  });
+
+  // 2. From custom added opp decks
+  customOppDecks.forEach(d => {
+    const key = `${d.class}___${d.name}`;
+    if (!deletedOppDecks.includes(key)) {
+      oppDeckMap[key] = { class: d.class, name: d.name, count: 0 };
+    }
+  });
+
+  // 3. From match history
+  matches.forEach(m => {
+    if (m.oppClass && m.oppDeckName) {
+      const key = `${m.oppClass}___${m.oppDeckName}`;
+      if (!deletedOppDecks.includes(key)) {
+        if (!oppDeckMap[key]) {
+          oppDeckMap[key] = { class: m.oppClass, name: m.oppDeckName, count: 0 };
+        }
+        oppDeckMap[key].count += 1;
+      }
+    }
+  });
+
+  let list = Object.values(oppDeckMap);
+  if (oppDeckManageClassFilter !== 'ALL') {
+    list = list.filter(d => d.class === oppDeckManageClassFilter);
+  }
+
+  // Sort by count desc, then name
+  list.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ja'));
+
+  if (list.length === 0) {
+    emptyMsg.classList.remove('hidden');
+    return;
+  }
+  emptyMsg.classList.add('hidden');
+
+  list.forEach(d => {
+    const card = document.createElement('div');
+    card.className = 'p-3 bg-[#182030] rounded-xl border border-[#273449] hover:border-[#384863] transition flex items-center justify-between gap-2';
+    
+    card.innerHTML = `
+      <div class="flex items-center gap-2.5 min-w-0">
+        <span class="px-2 py-0.5 rounded text-[11px] border flex-shrink-0 ${getClassBadge(d.class)}">${d.class}</span>
+        <div class="min-w-0">
+          <div class="font-bold text-xs text-white truncate" title="${escapeHtml(d.name)}">${escapeHtml(d.name)}</div>
+          <div class="text-[10px] text-gray-400">対戦ログ: <strong class="text-cyan-400">${d.count}</strong> 件</div>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1 flex-shrink-0">
+        <!-- Rename Button -->
+        <button type="button" class="btn-rename-opp-deck p-1.5 rounded-lg bg-[#222c3f] hover:bg-[#2c3952] text-gray-300 border border-[#344460] transition" data-class="${d.class}" data-name="${escapeHtml(d.name)}" title="名前を変更（過去の対戦ログも一括修正）">
+          <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+        </button>
+        <!-- Delete Button -->
+        <button type="button" class="btn-delete-opp-deck p-1.5 rounded-lg bg-[#222c3f] hover:bg-rose-950/70 text-gray-400 hover:text-rose-400 border border-[#344460] hover:border-rose-800 transition" data-class="${d.class}" data-name="${escapeHtml(d.name)}" title="この相手デッキを削除">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+        </button>
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+
+  // Action listeners
+  container.querySelectorAll('.btn-rename-opp-deck').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cls = btn.dataset.class;
+      const oldName = btn.dataset.name;
+      handleRenameOpponentDeck(cls, oldName);
+    });
+  });
+
+  container.querySelectorAll('.btn-delete-opp-deck').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cls = btn.dataset.class;
+      const name = btn.dataset.name;
+      confirmDeleteOpponentDeck(cls, name);
+    });
+  });
+
+  lucide.createIcons();
+}
+
+// Rename opponent deck across past matches & custom list
+function handleRenameOpponentDeck(className, oldName) {
+  const newName = prompt(`相手デッキ「[${className}] ${oldName}」の新しい名前を入力してください:\n（過去の対戦ログの表記も一括で更新されます）`, oldName);
+  if (!newName || newName.trim() === '' || newName.trim() === oldName) return;
+
+  const trimmed = newName.trim();
+  let affectedMatches = 0;
+
+  matches.forEach(m => {
+    if (m.oppClass === className && m.oppDeckName === oldName) {
+      m.oppDeckName = trimmed;
+      affectedMatches++;
+    }
+  });
+
+  // Update in custom list if exists
+  customOppDecks.forEach(d => {
+    if (d.class === className && d.name === oldName) {
+      d.name = trimmed;
+    }
+  });
+
+  // Ensure new name is not in deleted list
+  const newKey = `${className}___${trimmed}`;
+  deletedOppDecks = deletedOppDecks.filter(k => k !== newKey);
+
+  saveMatches();
+  saveCustomOppDecks();
+  saveDeletedOppDecks();
+
+  renderAll();
+  lucide.createIcons();
+  alert(`「${oldName}」を「${trimmed}」に変更しました！（過去ログ${affectedMatches}件を更新）`);
+}
+
+// Delete opponent deck with confirmation
+function confirmDeleteOpponentDeck(className, deckName) {
+  const matchCount = matches.filter(m => m.oppClass === className && m.oppDeckName === deckName).length;
+  const key = `${className}___${deckName}`;
+
+  if (matchCount > 0) {
+    const choice = confirm(
+      `相手デッキ「[${className}] ${deckName}」を削除しますか？\n\n` +
+      `※ 過去の対戦ログが ${matchCount} 件あります。\n` +
+      `【OK】: 相手デッキ名を候補から削除します。（過去の対戦記録は残し、相手デッキ名を「${className}不明」に変更します）\n` +
+      `【キャンセル】: 削除を取り消します。`
+    );
+
+    if (!choice) return;
+
+    // Clean matches oppDeckName to avoid keeping the deleted name
+    matches.forEach(m => {
+      if (m.oppClass === className && m.oppDeckName === deckName) {
+        m.oppDeckName = `${className}不明`;
+      }
+    });
+    saveMatches();
+  } else {
+    if (!confirm(`相手デッキ「[${className}] ${deckName}」を候補から削除しますか？`)) {
+      return;
+    }
+  }
+
+  // Add to deletedOppDecks list to prevent it from ever showing in suggestions
+  if (!deletedOppDecks.includes(key)) {
+    deletedOppDecks.push(key);
+    saveDeletedOppDecks();
+  }
+
+  // Remove from custom list
+  customOppDecks = customOppDecks.filter(d => !(d.class === className && d.name === deckName));
+  saveCustomOppDecks();
+
+  renderAll();
+  lucide.createIcons();
+}
+
 // Render Season Selectors across the app
 function renderSeasonSelectors() {
   const globalSelect = document.getElementById('global-season-select');
@@ -286,7 +726,6 @@ function renderSeasonSelectors() {
     badge.textContent = currentSeason.name;
   }
 
-  // 1. Header Global Season Select
   globalSelect.innerHTML = '';
   seasons.forEach(s => {
     const opt = document.createElement('option');
@@ -296,7 +735,6 @@ function renderSeasonSelectors() {
     globalSelect.appendChild(opt);
   });
 
-  // 2. Analytics Season Filter
   const prevAnalyticsVal = analyticsSeasonFilter.value || currentSeasonId;
   analyticsSeasonFilter.innerHTML = `
     <option value="${currentSeasonId}">現シーズン (${currentSeason ? currentSeason.name : ''}) のみ</option>
@@ -314,7 +752,6 @@ function renderSeasonSelectors() {
     analyticsSeasonFilter.value = prevAnalyticsVal;
   }
 
-  // 3. History Season Filter
   const prevHistoryVal = historySeasonFilter.value || 'ALL';
   historySeasonFilter.innerHTML = '<option value="ALL">全シーズン</option>';
   seasons.forEach(s => {
@@ -354,19 +791,17 @@ function setupClassSelector() {
   });
 }
 
-// Update Opponent Deck Suggestions (Prioritizing CURRENT SEASON)
+// Update Opponent Deck Suggestions (with instant "x" delete button on each chip)
 function updateOpponentDeckSuggestions() {
   const container = document.getElementById('opp-deck-suggestions');
   container.innerHTML = '';
 
-  // Current Season matches first
   const currentSeasonMatches = matches.filter(m => m.seasonId === currentSeasonId && m.oppClass === selectedOppClass);
   const currentSeasonCounts = {};
   currentSeasonMatches.forEach(m => {
     if (m.oppDeckName) currentSeasonCounts[m.oppDeckName] = (currentSeasonCounts[m.oppDeckName] || 0) + 1;
   });
 
-  // All time matches
   const allMatches = matches.filter(m => m.oppClass === selectedOppClass);
   const allCounts = {};
   allMatches.forEach(m => {
@@ -385,39 +820,64 @@ function updateOpponentDeckSuggestions() {
     'ナイトメア': ['アグロナイトメア', 'ミッドレンジナイトメア', 'コントロールナイトメア']
   };
 
+  const customForClass = customOppDecks.filter(d => d.class === selectedOppClass).map(d => d.name);
   const sortedCurrent = Object.keys(currentSeasonCounts).sort((a, b) => currentSeasonCounts[b] - currentSeasonCounts[a]);
   const sortedAll = Object.keys(allCounts).sort((a, b) => allCounts[b] - allCounts[a]);
   const defaultList = defaults[selectedOppClass] || [];
 
-  const combined = Array.from(new Set([...sortedCurrent, ...sortedAll, ...defaultList])).slice(0, 8);
+  // Merge unique and filter out deleted opponent decks
+  const rawCombined = Array.from(new Set([...customForClass, ...sortedCurrent, ...sortedAll, ...defaultList]));
+  const combined = rawCombined
+    .filter(name => !deletedOppDecks.includes(`${selectedOppClass}___${name}`))
+    .slice(0, 9);
 
   if (combined.length === 0) {
-    container.innerHTML = '<span class="text-xs text-gray-500 italic">候補なし（直接入力してください）</span>';
+    container.innerHTML = '<span class="text-xs text-gray-500 italic">候補なし（手動入力または「相手デッキ一覧・整理」から追加できます）</span>';
     return;
   }
 
   combined.forEach(deckName => {
-    const isCurrentHot = currentSeasonCounts[deckName] > 0;
-    const chip = document.createElement('button');
-    chip.type = 'button';
-    chip.className = `px-2.5 py-1 rounded-lg border text-xs transition flex items-center gap-1 ${
+    const isCurrentHot = (currentSeasonCounts[deckName] || 0) > 0;
+    
+    // Chip Wrapper
+    const chipWrapper = document.createElement('div');
+    chipWrapper.className = `group inline-flex items-center rounded-lg border text-xs transition ${
       isCurrentHot 
         ? 'bg-cyan-950/40 border-cyan-700/60 text-cyan-200 hover:border-cyan-400' 
-        : 'bg-[#20293a] border-[#2e3b52] text-gray-300 hover:bg-[#28354c]'
+        : 'bg-[#20293a] border-[#2e3b52] text-gray-300 hover:bg-[#28354c] hover:border-gray-500'
     }`;
-    chip.innerHTML = `
-      ${isCurrentHot ? '<span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>' : ''}
-      <span>${escapeHtml(deckName)}</span>
+
+    // Deck Name Clickable Button
+    const btnSelect = document.createElement('button');
+    btnSelect.type = 'button';
+    btnSelect.className = 'px-2.5 py-1 text-left flex items-center gap-1.5 focus:outline-none';
+    btnSelect.innerHTML = `
+      ${isCurrentHot ? '<span class="w-1.5 h-1.5 rounded-full bg-cyan-400 flex-shrink-0"></span>' : ''}
+      <span class="truncate">${escapeHtml(deckName)}</span>
     `;
-    
-    chip.addEventListener('click', () => {
+    btnSelect.addEventListener('click', () => {
       const input = document.getElementById('opp-deck-input');
       input.value = deckName;
       input.focus();
     });
 
-    container.appendChild(chip);
+    // Delete "x" button
+    const btnDelete = document.createElement('button');
+    btnDelete.type = 'button';
+    btnDelete.className = 'px-1.5 py-1 text-gray-400 hover:text-rose-400 hover:bg-rose-950/60 rounded-r-lg transition border-l border-white/5';
+    btnDelete.title = `「${deckName}」を候補から削除`;
+    btnDelete.innerHTML = '<i data-lucide="x" class="w-3 h-3"></i>';
+    btnDelete.addEventListener('click', (e) => {
+      e.stopPropagation();
+      confirmDeleteOpponentDeck(selectedOppClass, deckName);
+    });
+
+    chipWrapper.appendChild(btnSelect);
+    chipWrapper.appendChild(btnDelete);
+    container.appendChild(chipWrapper);
   });
+
+  lucide.createIcons();
 }
 
 // Setup Turn & Result Buttons
@@ -475,7 +935,6 @@ function setupQuickMemoTags() {
 
 // Form Handlers
 function setupFormHandlers() {
-  // Record Match Form
   const form = document.getElementById('record-form');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -493,6 +952,13 @@ function setupFormHandlers() {
 
     const currentMyDeck = myDecks.find(d => d.id === myDeckId);
     const myDeckName = currentMyDeck ? currentMyDeck.name : '不明なデッキ';
+
+    // If this opp deck was in deleted list, remove it from deleted list since user actively used it
+    const key = `${selectedOppClass}___${oppDeckName}`;
+    if (deletedOppDecks.includes(key)) {
+      deletedOppDecks = deletedOppDecks.filter(k => k !== key);
+      saveDeletedOppDecks();
+    }
 
     const newMatch = {
       id: 'match-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
@@ -512,14 +978,12 @@ function setupFormHandlers() {
     saveMatches();
     localStorage.setItem(STORAGE_LAST_DECK_KEY, myDeckId);
 
-    // Reset inputs
     oppDeckInput.value = '';
     document.getElementById('match-memo').value = '';
 
     renderAll();
     lucide.createIcons();
 
-    // Visual feedback
     const submitBtn = document.getElementById('btn-submit-match');
     const originalText = submitBtn.innerHTML;
     submitBtn.innerHTML = `<i data-lucide="check" class="w-5 h-5"></i> 保存完了！`;
@@ -532,7 +996,6 @@ function setupFormHandlers() {
     }, 1200);
   });
 
-  // Deck Manage Form
   const deckForm = document.getElementById('deck-manage-form');
   deckForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -551,6 +1014,7 @@ function setupFormHandlers() {
       class: cls,
       status: 'active',
       notes: notes,
+      insights: { plan: '', mulligan: '', cards: '', review: '' },
       createdAt: Date.now()
     };
 
@@ -563,10 +1027,9 @@ function setupFormHandlers() {
 
     renderAll();
     lucide.createIcons();
-    alert(`現役デッキ「${name}」を登録しました！`);
+    alert(`現役デッキ「${name}」を登録しました！\n詳細な考察・マリガン基準は「考察ノート」から記入できます。`);
   });
 
-  // Deck Active / Archived Tab switchers
   const btnActiveDecks = document.getElementById('deck-filter-active');
   const btnArchivedDecks = document.getElementById('deck-filter-archived');
 
@@ -586,9 +1049,9 @@ function setupFormHandlers() {
     lucide.createIcons();
   });
 
-  // Quick Add deck from record tab
   document.getElementById('btn-quick-add-my-deck').addEventListener('click', () => {
     switchTab('tab-decks');
+    document.getElementById('subtab-my-decks').click();
     document.getElementById('new-deck-name').focus();
   });
 }
@@ -598,6 +1061,7 @@ function renderAll() {
   renderSeasonSelectors();
   renderMyDeckSelectors();
   renderDecksList();
+  renderOppDecksManagement();
   renderCurrentDeckSummary();
   renderRecentMemos();
   renderAnalytics();
@@ -606,7 +1070,7 @@ function renderAll() {
   updateOpponentDeckSuggestions();
 }
 
-// Render My Deck Selectors (ONLY ACTIVE DECKS in record form!)
+// Render My Deck Selectors
 function renderMyDeckSelectors() {
   const select = document.getElementById('my-deck-select');
   const chipsContainer = document.getElementById('my-deck-chips');
@@ -616,7 +1080,6 @@ function renderMyDeckSelectors() {
   const activeDecks = myDecks.filter(d => d.status === 'active');
   const lastDeckId = localStorage.getItem(STORAGE_LAST_DECK_KEY) || (activeDecks[0]?.id || '');
 
-  // Select in Record Form (Only Active!)
   select.innerHTML = '<option value="">-- デッキを選択してください --</option>';
   chipsContainer.innerHTML = '';
 
@@ -631,7 +1094,6 @@ function renderMyDeckSelectors() {
     if (deck.id === lastDeckId) opt.selected = true;
     select.appendChild(opt);
 
-    // Quick Chips
     const chip = document.createElement('button');
     chip.type = 'button';
     const isSelected = deck.id === (select.value || lastDeckId);
@@ -653,7 +1115,6 @@ function renderMyDeckSelectors() {
     chipsContainer.appendChild(chip);
   });
 
-  // Analytics & History deck dropdowns include ALL decks (with tag for archived)
   const prevFilterVal = filterSelect.value || 'ALL';
   filterSelect.innerHTML = '<option value="ALL">全デッキ総合</option>';
   historyFilterSelect.innerHTML = '<option value="ALL">全自デッキ</option>';
@@ -699,7 +1160,7 @@ function getClassDotColor(clsName) {
   }
 }
 
-// Render Current Deck Summary Card (for active season)
+// Render Current Deck Summary Card
 function renderCurrentDeckSummary() {
   const container = document.getElementById('current-deck-summary');
   const select = document.getElementById('my-deck-select');
@@ -713,7 +1174,6 @@ function renderCurrentDeckSummary() {
   const deck = myDecks.find(d => d.id === selectedDeckId);
   if (!deck) return;
 
-  // Deck matches in current season
   const currentSeason = seasons.find(s => s.id === currentSeasonId);
   const deckMatches = matches.filter(m => m.myDeckId === selectedDeckId && m.seasonId === currentSeasonId);
   const total = deckMatches.length;
@@ -729,8 +1189,9 @@ function renderCurrentDeckSummary() {
   const secondWins = secondTurnMatches.filter(m => m.result === 'WIN').length;
   const secondRate = secondTurnMatches.length > 0 ? Math.round((secondWins / secondTurnMatches.length) * 100) : 0;
 
-  // Total all-time matches for reference
   const allTimeMatches = matches.filter(m => m.myDeckId === selectedDeckId);
+  const insights = deck.insights || {};
+  const hasInsights = !!(insights.plan || insights.mulligan || insights.cards || insights.review);
 
   container.innerHTML = `
     <div class="text-left space-y-3">
@@ -742,10 +1203,32 @@ function renderCurrentDeckSummary() {
         <span class="px-2 py-0.5 rounded text-xs border ${getClassBadge(deck.class)}">${deck.class}</span>
       </div>
 
-      ${deck.notes ? `
-        <div class="text-xs text-gray-300 bg-[#161e2c] p-2 rounded-lg border border-[#233044] leading-relaxed">
-          <span class="text-[10px] text-cyan-400 font-bold block mb-0.5">デッキメモ / スタン落ち対策:</span>
-          ${escapeHtml(deck.notes)}
+      <button type="button" class="btn-open-deck-notes w-full py-2 px-3 rounded-xl bg-gradient-to-r from-cyan-950/60 to-indigo-950/60 hover:from-cyan-900/60 hover:to-indigo-900/60 border border-cyan-700/50 text-cyan-300 text-xs font-bold flex items-center justify-between transition shadow-sm" data-id="${deck.id}">
+        <span class="flex items-center gap-1.5">
+          <i data-lucide="book-open" class="w-4 h-4 text-cyan-400"></i>
+          <span>デッキ考察ノートを見る・書く</span>
+        </span>
+        <span class="text-[10px] text-gray-400 flex items-center gap-1">
+          ${hasInsights ? '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 記入済' : '未記入'}
+          <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+        </span>
+      </button>
+
+      ${insights.mulligan ? `
+        <div class="bg-[#121824] p-2.5 rounded-xl border border-[#243144] text-xs space-y-1">
+          <div class="text-[10px] font-bold text-amber-300 flex items-center gap-1">
+            <i data-lucide="layers" class="w-3 h-3"></i>
+            マリガン基準（抜粋）
+          </div>
+          <p class="text-gray-300 whitespace-pre-wrap text-[11px] max-h-20 overflow-y-auto leading-relaxed">${escapeHtml(insights.mulligan)}</p>
+        </div>
+      ` : insights.plan ? `
+        <div class="bg-[#121824] p-2.5 rounded-xl border border-[#243144] text-xs space-y-1">
+          <div class="text-[10px] font-bold text-cyan-300 flex items-center gap-1">
+            <i data-lucide="target" class="w-3 h-3"></i>
+            基本立ち回り（抜粋）
+          </div>
+          <p class="text-gray-300 whitespace-pre-wrap text-[11px] max-h-20 overflow-y-auto leading-relaxed">${escapeHtml(insights.plan)}</p>
         </div>
       ` : ''}
 
@@ -775,6 +1258,12 @@ function renderCurrentDeckSummary() {
       </div>
     </div>
   `;
+
+  container.querySelectorAll('.btn-open-deck-notes').forEach(btn => {
+    btn.addEventListener('click', () => openDeckNotesModal(btn.dataset.id));
+  });
+
+  lucide.createIcons();
 }
 
 // Render Recent Memos
@@ -811,18 +1300,16 @@ function renderRecentMemos() {
   });
 }
 
-// Render Analytics Tab (Matchups & Stats filtered by Season & Deck)
+// Render Analytics Tab
 function renderAnalytics() {
   const filterSeasonVal = document.getElementById('analytics-season-filter').value;
   const filterDeckId = document.getElementById('analytics-deck-filter').value;
 
-  // Filter matches by Season
   let targetMatches = matches;
   if (filterSeasonVal !== 'ALL') {
     targetMatches = targetMatches.filter(m => m.seasonId === filterSeasonVal);
   }
 
-  // Filter matches by Deck
   if (filterDeckId !== 'ALL') {
     targetMatches = targetMatches.filter(m => m.myDeckId === filterDeckId);
   }
@@ -840,7 +1327,6 @@ function renderAnalytics() {
   const secondWins = secondTurn.filter(m => m.result === 'WIN').length;
   const secondRate = secondTurn.length > 0 ? Math.round((secondWins / secondTurn.length) * 100) : 0;
 
-  // Update Metric Cards
   document.getElementById('metric-total-matches').textContent = total;
   document.getElementById('metric-wins').textContent = wins;
   document.getElementById('metric-losses').textContent = losses;
@@ -927,13 +1413,11 @@ function renderAnalytics() {
     });
   }
 
-  // Render Charts
   renderAnalyticsCharts(targetMatches, matchupList);
 }
 
 // Chart.js Rendering
 function renderAnalyticsCharts(targetMatches, matchupList) {
-  // 1. Opponent Class Share Doughnut Chart
   const classCounts = {};
   targetMatches.forEach(m => {
     classCounts[m.oppClass] = (classCounts[m.oppClass] || 0) + 1;
@@ -968,7 +1452,6 @@ function renderAnalyticsCharts(targetMatches, matchupList) {
     }
   });
 
-  // 2. Top Matchups Winrate Bar Chart
   const topMatchups = matchupList.slice(0, 6);
   const muLabels = topMatchups.map(m => m.oppDeckName);
   const muWinrates = topMatchups.map(m => Math.round((m.wins / m.total) * 100));
@@ -1082,7 +1565,6 @@ function renderHistory() {
         </div>
       </div>
 
-      <!-- Matchup Display -->
       <div class="flex flex-wrap items-center gap-3 text-sm font-semibold">
         <div class="flex items-center gap-1.5 text-cyan-300 bg-[#192233] px-3 py-1.5 rounded-xl border border-[#2b3850]">
           <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
@@ -1095,7 +1577,6 @@ function renderHistory() {
         </div>
       </div>
 
-      <!-- Analysis / Reflection Memo -->
       ${m.memo ? `
         <div class="bg-[#0e131d] border border-[#232d40] rounded-xl p-3 text-xs text-gray-200">
           <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
@@ -1112,7 +1593,6 @@ function renderHistory() {
     container.appendChild(card);
   });
 
-  // Action listeners
   container.querySelectorAll('.btn-edit-memo').forEach(btn => {
     btn.addEventListener('click', () => openEditModal(btn.dataset.id));
   });
@@ -1123,7 +1603,7 @@ function renderHistory() {
   lucide.createIcons();
 }
 
-// Render Decks List in Tab 4 (Active vs Archived)
+// Render Decks List in Tab 4
 function renderDecksList() {
   const container = document.getElementById('deck-list-table');
   container.innerHTML = '';
@@ -1153,8 +1633,11 @@ function renderDecksList() {
     const wins = deckMatches.filter(m => m.result === 'WIN').length;
     const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
+    const insights = deck.insights || {};
+    const hasInsights = !!(insights.plan || insights.mulligan || insights.cards || insights.review);
+
     const row = document.createElement('div');
-    row.className = `p-4 bg-[#182030] rounded-xl border ${isArchived ? 'border-[#2d2a3d] opacity-85' : 'border-[#283449] hover:border-[#384762]'} transition space-y-2.5`;
+    row.className = `p-4 bg-[#182030] rounded-xl border ${isArchived ? 'border-[#2d2a3d] opacity-85' : 'border-[#283449] hover:border-[#384762]'} transition space-y-3`;
     
     row.innerHTML = `
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -1171,34 +1654,51 @@ function renderDecksList() {
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex items-center gap-2 text-xs">
-          <!-- Toggle Status: Archive or Restore -->
+        <div class="flex items-center gap-2 text-xs flex-wrap">
+          <button class="btn-open-deck-notes px-2.5 py-1.5 rounded-lg bg-cyan-950/50 hover:bg-cyan-900/60 border border-cyan-700/60 text-cyan-300 font-bold flex items-center gap-1.5 transition" data-id="${deck.id}">
+            <i data-lucide="book-open" class="w-3.5 h-3.5"></i>
+            <span>考察ノート ${hasInsights ? '★' : ''}</span>
+          </button>
+
           <button class="btn-toggle-status px-2.5 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition ${
             isArchived 
               ? 'border-emerald-700/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-950/70' 
               : 'border-amber-700/60 bg-amber-950/40 text-amber-300 hover:bg-amber-950/70'
           }" data-id="${deck.id}">
             <i data-lucide="${isArchived ? 'rotate-ccw' : 'archive'}" class="w-3.5 h-3.5"></i>
-            <span>${isArchived ? '現役に復活' : 'スタン落ち・保管庫へ'}</span>
+            <span>${isArchived ? '現役に復活' : 'スタン落ちへ'}</span>
           </button>
 
-          <!-- Duplicate Deck for New Season -->
           <button class="btn-duplicate-deck p-1.5 rounded-lg bg-[#222c3f] hover:bg-[#2c3952] text-gray-300 border border-[#344460] transition" data-id="${deck.id}" title="このデッキを複製して新シーズン版を作る">
             <i data-lucide="copy" class="w-3.5 h-3.5"></i>
           </button>
 
-          <!-- Delete Deck -->
           <button class="btn-delete-deck p-1.5 rounded-lg text-gray-400 hover:text-rose-400 hover:bg-rose-950/40 transition" data-id="${deck.id}" title="デッキを削除">
             <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
           </button>
         </div>
       </div>
 
-      <!-- Notes / Card rotation details -->
+      ${hasInsights ? `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs pt-1">
+          ${insights.plan ? `
+            <div class="bg-[#121824] p-2 rounded-lg border border-[#212c3f] space-y-0.5">
+              <span class="text-[10px] font-bold text-cyan-400 flex items-center gap-1">🎯 立ち回り方針</span>
+              <p class="text-gray-300 text-[11px] whitespace-pre-wrap line-clamp-2">${escapeHtml(insights.plan)}</p>
+            </div>
+          ` : ''}
+          ${insights.mulligan ? `
+            <div class="bg-[#121824] p-2 rounded-lg border border-[#212c3f] space-y-0.5">
+              <span class="text-[10px] font-bold text-amber-400 flex items-center gap-1">🃏 マリガン基準</span>
+              <p class="text-gray-300 text-[11px] whitespace-pre-wrap line-clamp-2">${escapeHtml(insights.mulligan)}</p>
+            </div>
+          ` : ''}
+        </div>
+      ` : ''}
+
       ${deck.notes ? `
-        <div class="text-xs text-gray-300 bg-[#121722] p-2 rounded-lg border border-[#232b3d] flex items-start gap-1.5">
-          <i data-lucide="sticky-note" class="w-3.5 h-3.5 text-gray-400 mt-0.5 flex-shrink-0"></i>
+        <div class="text-xs text-gray-400 bg-[#121722] p-2 rounded-lg border border-[#232b3d] flex items-start gap-1.5">
+          <i data-lucide="sticky-note" class="w-3.5 h-3.5 text-gray-500 mt-0.5 flex-shrink-0"></i>
           <span class="whitespace-pre-wrap">${escapeHtml(deck.notes)}</span>
         </div>
       ` : ''}
@@ -1207,7 +1707,10 @@ function renderDecksList() {
     container.appendChild(row);
   });
 
-  // Attach listeners
+  container.querySelectorAll('.btn-open-deck-notes').forEach(btn => {
+    btn.addEventListener('click', () => openDeckNotesModal(btn.dataset.id));
+  });
+
   container.querySelectorAll('.btn-toggle-status').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
@@ -1244,6 +1747,7 @@ function renderDecksList() {
         class: target.class,
         status: 'active',
         notes: `※「${target.name}」をベースに新環境調整`,
+        insights: JSON.parse(JSON.stringify(target.insights || { plan: '', mulligan: '', cards: '', review: '' })),
         createdAt: Date.now()
       };
 
@@ -1252,7 +1756,7 @@ function renderDecksList() {
       localStorage.setItem(STORAGE_LAST_DECK_KEY, newDeck.id);
       renderAll();
       lucide.createIcons();
-      alert(`「${newName}」を現役デッキとして作成しました！`);
+      alert(`「${newName}」を現役デッキとして作成しました！\n考察ノートも引き継がれています。`);
     });
   });
 
@@ -1267,6 +1771,8 @@ function renderDecksList() {
       }
     });
   });
+
+  lucide.createIcons();
 }
 
 // Edit Modal Handling
@@ -1375,7 +1881,11 @@ function setupFiltersAndSearch() {
   document.getElementById('btn-clear-all').addEventListener('click', () => {
     if (confirm('すべての対戦履歴とデッキデータを消去しますか？\n（事前に「保存」ボタンからバックアップを保存しておくことを推奨します）')) {
       matches = [];
+      deletedOppDecks = [];
+      customOppDecks = [];
       saveMatches();
+      saveDeletedOppDecks();
+      saveCustomOppDecks();
       renderAll();
       lucide.createIcons();
     }
@@ -1384,15 +1894,16 @@ function setupFiltersAndSearch() {
 
 // Export / Import JSON & Samples
 function setupDataManagement() {
-  // Export
   document.getElementById('btn-export').addEventListener('click', () => {
     const data = {
-      version: '2.0',
+      version: '2.2',
       exportedAt: new Date().toISOString(),
       seasons: seasons,
       currentSeasonId: currentSeasonId,
       decks: myDecks,
-      matches: matches
+      matches: matches,
+      deletedOppDecks: deletedOppDecks,
+      customOppDecks: customOppDecks
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -1403,7 +1914,6 @@ function setupDataManagement() {
     URL.revokeObjectURL(url);
   });
 
-  // Import
   const fileInput = document.getElementById('import-file-input');
   document.getElementById('btn-import-trigger').addEventListener('click', () => {
     fileInput.click();
@@ -1433,6 +1943,14 @@ function setupDataManagement() {
           myDecks = imported.decks;
           saveDecks();
         }
+        if (imported.deletedOppDecks && Array.isArray(imported.deletedOppDecks)) {
+          deletedOppDecks = imported.deletedOppDecks;
+          saveDeletedOppDecks();
+        }
+        if (imported.customOppDecks && Array.isArray(imported.customOppDecks)) {
+          customOppDecks = imported.customOppDecks;
+          saveCustomOppDecks();
+        }
         alert('バックアップデータを正常に復元しました！');
         renderAll();
         lucide.createIcons();
@@ -1444,7 +1962,6 @@ function setupDataManagement() {
     fileInput.value = '';
   });
 
-  // Sample Data Generator for testing
   document.getElementById('btn-add-sample').addEventListener('click', () => {
     addSampleData();
   });
@@ -1457,13 +1974,51 @@ function addSampleData() {
   ];
 
   const sampleDecks = [
-    { id: 'deck-1', name: '進化ロイヤル', class: 'ロイヤル', status: 'active', notes: 'カゲミツ・オクトー軸。今期も続投中', createdAt: Date.now() - 3600000 * 24 * 20 },
-    { id: 'deck-2', name: '秘術ウィッチ', class: 'ウィッチ', status: 'active', notes: '新カードノーマン採用で打点強化', createdAt: Date.now() - 3600000 * 24 * 15 },
-    { id: 'deck-3', name: '旧・結晶ビショップ', class: 'ビショップ', status: 'archived', notes: '【スタン落ち】スカルフェイン落ちのため保管庫へ移動', createdAt: Date.now() - 3600000 * 24 * 80 }
+    { 
+      id: 'deck-1', 
+      name: '進化ロイヤル', 
+      class: 'ロイヤル', 
+      status: 'active', 
+      notes: 'カゲミツ・オクトー軸。今期も続投中', 
+      insights: {
+        plan: '【序盤】2Tフォロワーから連携を稼ぐ。\n【中盤】5T目カゲミツ進化で盤面を制圧し、進化回数を稼ぐ。\n【リーサル】7〜8T目にオクトーと疾走フォロワーで一気に20点削り切る。',
+        mulligan: '【共通】2コスフォロワー最優先確保\n【先攻】テンポ重視で1・2・3の動きをキープ\n【後攻】除去札・進化時多面処理できるフォロワーを単キープ',
+        cards: '【採用調整】\n・低コスト除去スペル: 2枚→3枚 (アグロ対面への回答)\n・重いフィニッシャー: 3枚→2枚 (手札事故防止)',
+        review: '先攻時の安定感は非常に高いが、後攻でアグロ相手に押し切られる試合があった。序盤の受け札をもう少し厚くするか要検討。'
+      },
+      createdAt: Date.now() - 3600000 * 24 * 20 
+    },
+    { 
+      id: 'deck-2', 
+      name: '秘術ウィッチ', 
+      class: 'ウィッチ', 
+      status: 'active', 
+      notes: '新カードノーマン採用で打点強化', 
+      insights: {
+        plan: '土のスタック管理とノーマンの守護で中盤を耐え、終盤に紅蓮の魔術等でバースト。',
+        mulligan: '土の印供給札を最優先キープ。後攻は除去札もセット。',
+        cards: 'ノーマン3枚必須。盤面除去札の枚数を微調整中。',
+        review: 'スタック切れを起こさないプレイングが最重要。'
+      },
+      createdAt: Date.now() - 3600000 * 24 * 15 
+    },
+    { 
+      id: 'deck-3', 
+      name: '旧・結晶ビショップ', 
+      class: 'ビショップ', 
+      status: 'archived', 
+      notes: '【スタン落ち】スカルフェイン落ちのため保管庫へ移動', 
+      insights: {
+        plan: '結晶5回達成でスカルフェイン早期着地',
+        mulligan: 'スカルフェイン全力マリガン',
+        cards: 'スタン落ちのため現行ローテでは使用不可',
+        review: '前環境最強の一角だったがキーカードがスタン落ちしたため保管庫へ移行。'
+      },
+      createdAt: Date.now() - 3600000 * 24 * 80 
+    }
   ];
 
   const sampleMatches = [
-    // Current Season matches
     {
       id: 'sample-1',
       seasonId: 'season-current',
@@ -1516,7 +2071,6 @@ function addSampleData() {
       memo: '【理想ムーブ】土の印が綺麗に回り完勝。',
       createdAt: Date.now() - 3600000 * 4
     },
-    // Previous Season matches
     {
       id: 'sample-prev-1',
       seasonId: 'season-prev',
@@ -1536,20 +2090,23 @@ function addSampleData() {
   currentSeasonId = 'season-current';
   myDecks = sampleDecks;
   matches = sampleMatches;
+  deletedOppDecks = [];
+  customOppDecks = [];
 
   saveSeasons();
   saveDecks();
   saveMatches();
+  saveDeletedOppDecks();
+  saveCustomOppDecks();
   localStorage.setItem(STORAGE_CURRENT_SEASON_KEY, currentSeasonId);
 
   renderAll();
   lucide.createIcons();
-  alert('シーズン対応のサンプルデータ（現環境＋前環境＋スタン落ちデッキ）を投入しました！\nヘッダーのシーズン切り替えやデッキ管理タブを確認してみてください。');
+  alert('サンプルデータを投入しました！');
 }
 
 // Helpers
 function updateHeaderStats() {
-  const currentSeason = seasons.find(s => s.id === currentSeasonId);
   const currentMatches = matches.filter(m => m.seasonId === currentSeasonId);
   const total = currentMatches.length;
   const wins = currentMatches.filter(m => m.result === 'WIN').length;

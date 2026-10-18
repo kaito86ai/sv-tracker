@@ -1,0 +1,89 @@
+/* Custom styling for Shadowverse Battle Tracker */
+@import url('https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400;500;700;800&display=swap');
+
+body {
+  font-family: 'M PLUS 1p', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Class Badges & Glow Colors */
+.badge-forest {
+  background-color: rgba(34, 197, 94, 0.15);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #4ade80;
+}
+.badge-sword {
+  background-color: rgba(234, 179, 8, 0.15);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #facc15;
+}
+.badge-rune {
+  background-color: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38bdf8;
+}
+.badge-dragon {
+  background-color: rgba(249, 115, 22, 0.15);
+  border-color: rgba(249, 115, 22, 0.4);
+  color: #fb923c;
+}
+.badge-shadow {
+  background-color: rgba(168, 85, 247, 0.15);
+  border-color: rgba(168, 85, 247, 0.4);
+  color: #c084fc;
+}
+.badge-blood {
+  background-color: rgba(244, 63, 94, 0.15);
+  border-color: rgba(244, 63, 94, 0.4);
+  color: #fb7185;
+}
+.badge-haven {
+  background-color: rgba(254, 240, 138, 0.15);
+  border-color: rgba(254, 240, 138, 0.4);
+  color: #fef08a;
+}
+.badge-portal {
+  background-color: rgba(20, 184, 166, 0.15);
+  border-color: rgba(20, 184, 166, 0.4);
+  color: #2dd4bf;
+}
+.badge-nightmare {
+  background-color: rgba(147, 51, 234, 0.2);
+  border-color: rgba(147, 51, 234, 0.5);
+  color: #d8b4fe;
+}
+
+/* Class Button Active States */
+.class-btn {
+  transition: all 0.15s ease-in-out;
+}
+.class-btn.active {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+  border-color: #38bdf8 !important;
+  background-color: #1e293b !important;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f141d;
+}
+::-webkit-scrollbar-thumb {
+  background: #283348;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3b4964;
+}
+
+/* Match card highlight */
+.match-card {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.match-card:hover {
+  border-color: #384762;
+  transform: translateY(-1px);
+}

@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>シャドウバース 戦績＆分析アナライザー</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            sv: {
+              dark: '#0d1117',
+              card: '#161b22',
+              border: '#30363d',
+              accent: '#38bdf8',
+              win: '#10b981',
+              lose: '#ef4444',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#0b0e14] text-gray-100 min-h-screen font-sans antialiased selection:bg-cyan-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-[#232936] bg-[#111622]/95 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Brand & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-indigo-600 to-fuchsia-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+          <i data-lucide="swords" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight bg-gradient-to-r from-cyan-400 via-blue-300 to-indigo-300 bg-clip-text text-transparent">
+            Shadowverse Battle Analyzer
+          </h1>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-gray-400">対戦記録＆環境・デッキ別勝率分析</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center: Season (Environment) Selector -->
+      <div class="flex items-center bg-[#161f2e] border border-[#2b374c] rounded-xl px-2.5 py-1.5 gap-2 shadow-inner">
+        <div class="flex items-center gap-1.5 text-xs text-cyan-400 font-semibold">
+          <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">シーズン (環境):</span>
+        </div>
+        <select id="global-season-select" class="bg-[#1e293b] border border-[#37445c] rounded-lg px-2.5 py-1 text-xs text-white font-medium focus:outline-none focus:ring-1 focus:ring-cyan-400 cursor-pointer">
+          <!-- JSで動的生成 -->
+        </select>
+        <button id="btn-open-new-season" class="px-2 py-1 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/40 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition" title="新環境・新弾への切り替えとスタン落ち整理">
+          <i data-lucide="sparkles" class="w-3 h-3"></i>
+          <span>新シーズン開始</span>
+        </button>
+      </div>
+
+      <!-- Quick Stats & Actions -->
+      <div class="flex items-center gap-2">
+        <div class="hidden lg:flex items-center bg-[#182030] px-3 py-1.5 rounded-lg border border-[#2b3548] text-xs gap-3">
+          <span>対戦: <strong id="header-total-matches" class="text-white">0</strong></span>
+          <span class="text-gray-500">|</span>
+          <span>勝率: <strong id="header-win-rate" class="text-cyan-400">0%</strong></span>
+        </div>
+
+        <button id="btn-export" class="px-2.5 py-1.5 rounded-lg bg-[#182030] hover:bg-[#222c42] border border-[#2b3548] text-xs font-medium text-gray-300 flex items-center gap-1.5 transition" title="データをファイルにバックアップ保存">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">保存</span>
+        </button>
+        <button id="btn-import-trigger" class="px-2.5 py-1.5 rounded-lg bg-[#182030] hover:bg-[#222c42] border border-[#2b3548] text-xs font-medium text-gray-300 flex items-center gap-1.5 transition" title="バックアップファイルを復元">
+          <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">復元</span>
+        </button>
+        <input type="file" id="import-file-input" class="hidden" accept=".json">
+
+        <button id="btn-add-sample" class="px-2.5 py-1.5 rounded-lg bg-indigo-900/40 hover:bg-indigo-900/60 border border-indigo-700/50 text-xs font-medium text-indigo-300 flex items-center gap-1.5 transition" title="模擬対戦データを投入して試す">
+          <i data-lucide="flask-conical" class="w-3.5 h-3.5"></i>
+          <span class="hidden md:inline">サンプル</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="max-w-7xl mx-auto px-4 sm:px-6 pt-3">
+    <div class="flex border-b border-[#232936] gap-2 sm:gap-6 text-sm overflow-x-auto">
+      <button class="nav-tab active flex items-center gap-2 pb-3 px-1 border-b-2 border-cyan-400 text-cyan-400 font-semibold whitespace-nowrap" data-tab="tab-record">
+        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+        <span>対戦を記録する</span>
+      </button>
+      <button class="nav-tab flex items-center gap-2 pb-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition font-medium whitespace-nowrap" data-tab="tab-analytics">
+        <i data-lucide="pie-chart" class="w-4 h-4"></i>
+        <span>デッキ相性＆勝率分析</span>
+      </button>
+      <button class="nav-tab flex items-center gap-2 pb-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition font-medium whitespace-nowrap" data-tab="tab-history">
+        <i data-lucide="history" class="w-4 h-4"></i>
+        <span>対戦履歴・メモ一覧 (<span id="history-count-badge">0</span>)</span>
+      </button>
+      <button class="nav-tab flex items-center gap-2 pb-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition font-medium whitespace-nowrap" data-tab="tab-decks">
+        <i data-lucide="layers" class="w-4 h-4"></i>
+        <span>デッキ管理＆スタン落ち</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main Content Area -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+
+    <!-- TAB 1: 対戦記録入力フォーム -->
+    <section id="tab-record" class="tab-content block">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Input Card (Left 2 cols) -->
+        <div class="lg:col-span-2 bg-[#131926] border border-[#232c3f] rounded-2xl p-5 sm:p-6 shadow-xl space-y-5">
+          <div class="flex flex-wrap items-center justify-between pb-3 border-b border-[#232c3f] gap-2">
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="file-plus" class="w-5 h-5 text-cyan-400"></i>
+              新規対戦の記録
+            </h2>
+            <div class="flex items-center gap-2">
+              <span class="text-xs text-gray-400">記録先シーズン:</span>
+              <span id="record-current-season-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-cyan-950/60 text-cyan-300 border border-cyan-800">
+                現環境
+              </span>
+            </div>
+          </div>
+
+          <form id="record-form" class="space-y-6">
+            <!-- 1. 自分のデッキ選択 -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                  自分の現役デッキ
+                </label>
+                <div class="flex items-center gap-3">
+                  <span class="text-[11px] text-gray-400 hidden sm:inline">※ スタン落ちデッキは除外されています</span>
+                  <button type="button" id="btn-quick-add-my-deck" class="text-xs text-cyan-400 hover:underline flex items-center gap-1">
+                    <i data-lucide="plus" class="w-3 h-3"></i> 新規デッキ登録
+                  </button>
+                </div>
+              </div>
+              <div id="my-deck-chips" class="flex flex-wrap gap-2 mb-2">
+                <!-- 自デッキのチップボタンが動的表示 -->
+              </div>
+              <select id="my-deck-select" class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3.5 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                <option value="">-- デッキを選択してください --</option>
+              </select>
+            </div>
+
+            <!-- 2. 対戦相手のクラス & デッキ -->
+            <div class="p-4 bg-[#182030] rounded-xl border border-[#26334a] space-y-4">
+              <div>
+                <label class="text-sm font-semibold text-gray-200 flex items-center gap-2 mb-2">
+                  <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                  相手のクラス (リーダー)
+                </label>
+                <div id="opponent-class-selector" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-1.5">
+                  <!-- クラスアイコンボタンがJSで展開 -->
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <label class="text-xs font-medium text-gray-300">
+                    相手のデッキ名 (ワンタップ選択または直接入力)
+                  </label>
+                  <span class="text-[11px] text-gray-400">※ このシーズンで遭遇したデッキが優先表示されます</span>
+                </div>
+                <!-- 候補サジェストタグ -->
+                <div id="opp-deck-suggestions" class="flex flex-wrap gap-1.5 mb-2.5 min-h-[28px]">
+                  <span class="text-xs text-gray-500 italic">クラスを選択すると候補が表示されます</span>
+                </div>
+                <!-- 入力フィールド -->
+                <div class="relative">
+                  <input type="text" id="opp-deck-input" placeholder="例: 秘術ウィッチ、進化ロイヤル、結晶ビショップ" 
+                    class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. 先攻/後攻 & 勝敗 -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <!-- ターン順 -->
+              <div>
+                <label class="text-xs font-semibold text-gray-300 block mb-2">ターン</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button type="button" id="btn-turn-first" class="turn-btn py-2.5 px-3 rounded-xl border border-[#2e3a52] bg-[#1a2233] text-sm font-bold flex items-center justify-center gap-2 transition" data-turn="先攻">
+                    <i data-lucide="arrow-right-circle" class="w-4 h-4 text-amber-400"></i>
+                    先攻
+                  </button>
+                  <button type="button" id="btn-turn-second" class="turn-btn py-2.5 px-3 rounded-xl border border-[#2e3a52] bg-[#1a2233] text-sm font-bold flex items-center justify-center gap-2 transition" data-turn="後攻">
+                    <i data-lucide="arrow-left-circle" class="w-4 h-4 text-indigo-400"></i>
+                    後攻
+                  </button>
+                </div>
+              </div>
+
+              <!-- 勝敗 -->
+              <div>
+                <label class="text-xs font-semibold text-gray-300 block mb-2">勝敗結果</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button type="button" id="btn-result-win" class="result-btn py-2.5 px-3 rounded-xl border border-emerald-900/60 bg-emerald-950/30 text-emerald-300 text-sm font-extrabold flex items-center justify-center gap-2 transition" data-result="WIN">
+                    <i data-lucide="trophy" class="w-4 h-4 text-emerald-400"></i>
+                    WIN
+                  </button>
+                  <button type="button" id="btn-result-lose" class="result-btn py-2.5 px-3 rounded-xl border border-[#2e3a52] bg-[#1a2233] text-gray-300 text-sm font-extrabold flex items-center justify-center gap-2 transition" data-result="LOSE">
+                    <i data-lucide="skull" class="w-4 h-4 text-rose-400"></i>
+                    LOSE
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. 自作の対戦分析・反省・メモ -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  <i data-lucide="edit-3" class="w-4 h-4 text-cyan-400"></i>
+                  対戦分析・反省メモ
+                </label>
+                <div class="flex flex-wrap gap-1 text-[11px] text-gray-400">
+                  <button type="button" class="quick-memo-tag px-2 py-0.5 rounded bg-[#1c2436] hover:bg-[#253046] text-gray-300 border border-[#2b3548]">リーサル見逃し</button>
+                  <button type="button" class="quick-memo-tag px-2 py-0.5 rounded bg-[#1c2436] hover:bg-[#253046] text-gray-300 border border-[#2b3548]">マリガン事故</button>
+                  <button type="button" class="quick-memo-tag px-2 py-0.5 rounded bg-[#1c2436] hover:bg-[#253046] text-gray-300 border border-[#2b3548]">ケア不足</button>
+                  <button type="button" class="quick-memo-tag px-2 py-0.5 rounded bg-[#1c2436] hover:bg-[#253046] text-gray-300 border border-[#2b3548]">理想ムーブ</button>
+                  <button type="button" class="quick-memo-tag px-2 py-0.5 rounded bg-[#1c2436] hover:bg-[#253046] text-gray-300 border border-[#2b3548]">新カード活躍</button>
+                </div>
+              </div>
+              <textarea id="match-memo" rows="3" placeholder="対戦の振り返り、キーカード、勝因・敗因、新カードの使用感、プレイング改善点などを記録..." 
+                class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl p-3 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 transition"></textarea>
+            </div>
+
+            <!-- 登録ボタン -->
+            <div class="pt-2">
+              <button type="submit" id="btn-submit-match" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-base shadow-lg shadow-cyan-600/25 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+                <i data-lucide="check-circle-2" class="w-5 h-5"></i>
+                対戦結果を保存する
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Right: Recent Matches Preview & Current Deck Stats -->
+        <div class="space-y-6">
+          <!-- 選択中デッキのサマリーカード -->
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span>選択中デッキの今期戦績</span>
+              <i data-lucide="target" class="w-4 h-4 text-cyan-400"></i>
+            </h3>
+            <div id="current-deck-summary" class="text-center py-4">
+              <p class="text-gray-400 text-sm">自デッキを選択すると、そのデッキの戦績と勝率がここに表示されます。</p>
+            </div>
+          </div>
+
+          <!-- 直近のメモ・振り返りカード -->
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                <i data-lucide="clock" class="w-4 h-4 text-indigo-400"></i>
+                直近の対戦分析メモ
+              </h3>
+              <button class="nav-switch text-xs text-cyan-400 hover:underline" data-target="tab-history">全件見る</button>
+            </div>
+            <div id="recent-memos-list" class="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+              <!-- JSで直近5件を表示 -->
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 2: デッキ相性＆勝率分析 (同対勝率) -->
+    <section id="tab-analytics" class="tab-content hidden">
+      <div class="space-y-6">
+
+        <!-- Filter bar -->
+        <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-4">
+            <!-- Season Filter in Analytics -->
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-gray-400">集計対象シーズン:</label>
+              <select id="analytics-season-filter" class="bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3 py-1.5 text-xs text-cyan-300 font-bold focus:outline-none focus:ring-1 focus:ring-cyan-500">
+                <!-- JSで動的生成 -->
+              </select>
+            </div>
+
+            <!-- Deck Filter in Analytics -->
+            <div class="flex items-center gap-2">
+              <label class="text-xs font-semibold text-gray-400">自デッキ:</label>
+              <select id="analytics-deck-filter" class="bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3 py-1.5 text-xs text-gray-100 font-medium focus:outline-none focus:ring-1 focus:ring-cyan-500">
+                <option value="ALL">全デッキ総合</option>
+                <!-- 動的追加 -->
+              </select>
+            </div>
+          </div>
+
+          <div class="text-xs text-gray-400">
+            マッチアップごとの勝敗・勝率を自動算出しています
+          </div>
+        </div>
+
+        <!-- 3-Stats Metric Cards -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-4">
+            <div class="text-xs text-gray-400 mb-1">対戦数 (勝 / 敗)</div>
+            <div class="text-2xl font-bold text-white flex items-baseline gap-2">
+              <span id="metric-total-matches">0</span>
+              <span class="text-xs font-normal text-gray-400">(<span id="metric-wins" class="text-emerald-400 font-bold">0</span>W - <span id="metric-losses" class="text-rose-400 font-bold">0</span>L)</span>
+            </div>
+          </div>
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-4">
+            <div class="text-xs text-gray-400 mb-1">勝率</div>
+            <div class="text-2xl font-bold text-cyan-400" id="metric-win-rate">0%</div>
+          </div>
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-4">
+            <div class="text-xs text-gray-400 mb-1">先攻勝率</div>
+            <div class="text-2xl font-bold text-amber-400" id="metric-first-turn-winrate">0%</div>
+          </div>
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-4">
+            <div class="text-xs text-gray-400 mb-1">後攻勝率</div>
+            <div class="text-2xl font-bold text-indigo-400" id="metric-second-turn-winrate">0%</div>
+          </div>
+        </div>
+
+        <!-- 同対デッキ勝率マトリクス (VS相手デッキ別勝率表) -->
+        <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl">
+          <div class="flex flex-wrap items-center justify-between pb-4 border-b border-[#232c3f] mb-4 gap-2">
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <i data-lucide="crosshair" class="w-5 h-5 text-cyan-400"></i>
+                マッチアップ別勝率（同対デッキ分析）
+              </h3>
+              <p class="text-xs text-gray-400 mt-0.5">自デッキと相手デッキごとの勝敗数・勝率の一覧</p>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="inline-flex items-center gap-1 text-emerald-400">● 60%以上 有利</span>
+              <span class="inline-flex items-center gap-1 text-gray-300">● 40-59% 互角</span>
+              <span class="inline-flex items-center gap-1 text-rose-400">● 40%未満 不利</span>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-[#263147] text-xs font-semibold text-gray-400">
+                  <th class="py-3 px-4">相手デッキ名</th>
+                  <th class="py-3 px-3">クラス</th>
+                  <th class="py-3 px-3 text-center">対戦数</th>
+                  <th class="py-3 px-3 text-center">勝 - 敗</th>
+                  <th class="py-3 px-3 text-center">勝率</th>
+                  <th class="py-3 px-3 text-center">先攻勝率</th>
+                  <th class="py-3 px-3 text-center">後攻勝率</th>
+                  <th class="py-3 px-4">勝率バー</th>
+                </tr>
+              </thead>
+              <tbody id="matchup-table-body" class="divide-y divide-[#1e2638]">
+                <!-- 動的生成 -->
+              </tbody>
+            </table>
+          </div>
+          <div id="matchup-empty-msg" class="text-center py-10 text-gray-500 text-sm hidden">
+            該当する対戦データがありません。条件を変えるか「対戦を記録する」から記録してください。
+          </div>
+        </div>
+
+        <!-- グラフセクション -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl">
+            <h4 class="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2">
+              <i data-lucide="pie-chart" class="w-4 h-4 text-cyan-400"></i>
+              相手クラス別対戦割合 (環境シェア)
+            </h4>
+            <div class="relative h-64 flex items-center justify-center">
+              <canvas id="classShareChart"></canvas>
+            </div>
+          </div>
+          <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl">
+            <h4 class="text-sm font-bold text-gray-200 mb-4 flex items-center gap-2">
+              <i data-lucide="bar-chart-3" class="w-4 h-4 text-cyan-400"></i>
+              主要デッキ別 勝率比較
+            </h4>
+            <div class="relative h-64 flex items-center justify-center">
+              <canvas id="deckWinrateChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- TAB 3: 対戦履歴 & 分析メモ一覧 -->
+    <section id="tab-history" class="tab-content hidden">
+      <div class="space-y-4">
+        <!-- Search & Filter Controls -->
+        <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2 sm:gap-4 flex-1">
+            <div class="relative flex-1 min-w-[180px]">
+              <i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-gray-400"></i>
+              <input type="text" id="history-search" placeholder="分析メモやデッキ名で検索..." 
+                class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl pl-9 pr-3 py-2 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+            </div>
+            <select id="history-filter-season" class="bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3 py-2 text-xs text-gray-100">
+              <option value="ALL">全シーズン</option>
+              <!-- JSで動的生成 -->
+            </select>
+            <select id="history-filter-result" class="bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3 py-2 text-xs text-gray-100">
+              <option value="ALL">全ての勝敗</option>
+              <option value="WIN">WIN のみ</option>
+              <option value="LOSE">LOSE のみ</option>
+            </select>
+            <select id="history-filter-deck" class="bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3 py-2 text-xs text-gray-100">
+              <option value="ALL">全自デッキ</option>
+            </select>
+          </div>
+          <button id="btn-clear-all" class="text-xs text-rose-400 hover:text-rose-300 hover:underline flex items-center gap-1">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            全データ消去
+          </button>
+        </div>
+
+        <!-- History Match Cards List -->
+        <div id="history-list-container" class="space-y-3">
+          <!-- JSで対戦カードを展開 -->
+        </div>
+
+        <div id="history-empty-msg" class="bg-[#131926] border border-[#232c3f] rounded-2xl p-12 text-center text-gray-500 hidden">
+          該当する対戦履歴がありません。
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 4: デッキ管理＆スタン落ち -->
+    <section id="tab-decks" class="tab-content hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- 自デッキ登録カード -->
+        <div class="bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl space-y-4">
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="plus" class="w-5 h-5 text-cyan-400"></i>
+            自デッキの新規登録
+          </h3>
+          <form id="deck-manage-form" class="space-y-4">
+            <div>
+              <label class="text-xs font-semibold text-gray-300 block mb-1">デッキ名</label>
+              <input type="text" id="new-deck-name" placeholder="例: 秘術ウィッチ、進化ロイヤル" required
+                class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3.5 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-300 block mb-1">クラス</label>
+              <select id="new-deck-class" required class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3.5 py-2.5 text-sm text-gray-100 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                <option value="エルフ">エルフ (Forest)</option>
+                <option value="ロイヤル">ロイヤル (Sword)</option>
+                <option value="ウィッチ">ウィッチ (Rune)</option>
+                <option value="ドラゴン">ドラゴン (Dragon)</option>
+                <option value="ネクロマンサー">ネクロマンサー (Shadow)</option>
+                <option value="ヴァンパイア">ヴァンパイア (Blood)</option>
+                <option value="ビショップ">ビショップ (Haven)</option>
+                <option value="ネメシス">ネメシス (Portal)</option>
+                <option value="ナイトメア">ナイトメア (Nightmare / ビヨンド)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs font-semibold text-gray-300 block mb-1">キーカード / スタン落ち対策メモ（任意）</label>
+              <textarea id="new-deck-notes" rows="2" placeholder="例: ○○が主軸、来期○○がスタン落ち代替要検討"
+                class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3.5 py-2 text-xs text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea>
+            </div>
+            <button type="submit" class="w-full py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm transition">
+              現役デッキとして登録する
+            </button>
+          </form>
+
+          <!-- Season Deck Quick Transition Tip -->
+          <div class="p-3.5 bg-[#182030] rounded-xl border border-[#273247] text-xs text-gray-300 space-y-1.5">
+            <div class="font-bold text-cyan-400 flex items-center gap-1.5">
+              <i data-lucide="info" class="w-4 h-4"></i>
+              シーズン切り替えとスタン落ち
+            </div>
+            <p class="text-[11px] text-gray-400 leading-relaxed">
+              新弾が出たときは右上の「新シーズン開始」を押すと、使えなくなるデッキをワンクリックで「スタン落ち（保管庫）」に移せます。保管庫に入れたデッキは対戦記録の候補から消え、過去の戦績はそのまま残ります。
+            </p>
+          </div>
+        </div>
+
+        <!-- デッキ一覧（現役 / スタン落ち 保管庫） -->
+        <div class="lg:col-span-2 bg-[#131926] border border-[#232c3f] rounded-2xl p-5 shadow-xl space-y-4">
+          <div class="flex flex-wrap items-center justify-between pb-3 border-b border-[#232c3f] gap-3">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="layers" class="w-5 h-5 text-cyan-400"></i>
+              登録デッキ一覧
+            </h3>
+
+            <!-- Active vs Archived Sub-tabs -->
+            <div class="flex items-center bg-[#182030] p-1 rounded-xl border border-[#29344b] text-xs">
+              <button id="deck-filter-active" class="px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-bold transition flex items-center gap-1.5">
+                <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+                現役デッキ (<span id="count-active-decks">0</span>)
+              </button>
+              <button id="deck-filter-archived" class="px-3 py-1.5 rounded-lg text-gray-400 hover:text-white font-medium transition flex items-center gap-1.5">
+                <i data-lucide="archive" class="w-3.5 h-3.5"></i>
+                スタン落ち・保管庫 (<span id="count-archived-decks">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <div id="deck-list-table" class="space-y-3">
+            <!-- 動的展開 -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: 新シーズン作成＆デッキ整理モーダル -->
+  <div id="new-season-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#131926] border border-[#2b3548] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between pb-3 border-b border-[#232c3f]">
+        <div class="flex items-center gap-2">
+          <i data-lucide="sparkles" class="w-5 h-5 text-cyan-400"></i>
+          <h3 class="text-base font-bold text-white">新シーズンの開始＆スタン落ち整理</h3>
+        </div>
+        <button id="btn-close-new-season-modal" class="text-gray-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-300 block mb-1">新シーズン・環境名</label>
+          <input type="text" id="new-season-name-input" placeholder="例: 第34弾 新パック環境、アディショナル後環境" required
+            class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl px-3.5 py-2.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500">
+        </div>
+
+        <div class="p-3.5 bg-[#182030] rounded-xl border border-[#273247] space-y-2">
+          <div class="flex items-center justify-between">
+            <label class="text-xs font-bold text-white flex items-center gap-1.5">
+              <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-amber-400"></i>
+              新環境でも続投するデッキの選択
+            </label>
+            <span class="text-[11px] text-gray-400">チェックを外したデッキは「スタン落ち保管庫」へ移動します</span>
+          </div>
+          <div id="season-transition-decks-list" class="space-y-1.5 max-h-48 overflow-y-auto pt-1">
+            <!-- デッキ引き継ぎチェックボックスリスト -->
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-[#232c3f]">
+        <button type="button" id="btn-cancel-new-season" class="px-4 py-2 rounded-xl bg-[#1b2333] text-gray-300 text-sm">キャンセル</button>
+        <button type="button" id="btn-confirm-new-season" class="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-bold text-sm shadow-md transition">
+          新シーズンを開始する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Match Modal -->
+  <div id="edit-modal" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#131926] border border-[#2b3548] rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-[#232c3f]">
+        <h3 class="text-base font-bold text-white">対戦メモ・分析の編集</h3>
+        <button id="btn-close-edit-modal" class="text-gray-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <input type="hidden" id="edit-match-id">
+      <div>
+        <label class="text-xs font-semibold text-gray-300 block mb-1">勝敗</label>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" id="edit-result-win" class="py-2 rounded-lg border font-bold text-sm">WIN</button>
+          <button type="button" id="edit-result-lose" class="py-2 rounded-lg border font-bold text-sm">LOSE</button>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-300 block mb-1">分析・反省メモ</label>
+        <textarea id="edit-match-memo" rows="5" class="w-full bg-[#1b2333] border border-[#2e3a52] rounded-xl p-3 text-sm text-gray-100"></textarea>
+      </div>
+      <div class="flex justify-end gap-2 pt-2">
+        <button type="button" id="btn-cancel-edit" class="px-4 py-2 rounded-xl bg-[#1b2333] text-gray-300 text-sm">キャンセル</button>
+        <button type="button" id="btn-save-edit" class="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

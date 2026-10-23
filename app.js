@@ -1,4 +1,5 @@
-// Shadowverse Battle Analyzer - Main Logic (with Seasons, Card Rotation, Deck Insights & Opponent Deck Management)
+// Shadowverse Battle Analyzer - Main Logic
+// Features: Seasons, Card Rotation, Deck Insights, Opponent Deck Management, Matchup Memos Drilldown
 
 // Storage Keys
 const STORAGE_SEASONS_KEY = 'sv_analyzer_seasons_v2';
@@ -24,7 +25,8 @@ const SV_CLASSES = [
 
 // Initial Default Seasons
 const DEFAULT_SEASONS = [
-  { id: 'season-current', name: '現環境 (Season 1 / 最新弾)', createdAt: Date.now() - 3600000 * 24 * 30 }
+  { id: 'season-current', name: '第33弾 Resurgent Legends (現環境)', createdAt: Date.now() - 3600000 * 24 * 30 },
+  { id: 'season-prev', name: '第32弾 Heroes of Rivenbrandt (前環境)', createdAt: Date.now() - 3600000 * 24 * 90 }
 ];
 
 // Default Decks with Insights Structure
@@ -34,51 +36,42 @@ const DEFAULT_MY_DECKS = [
     name: '進化ロイヤル', 
     class: 'ロイヤル', 
     status: 'active', 
-    notes: 'カゲミツ・オクトー軸。新弾でも現役', 
+    notes: 'カゲミツ・オクトー軸。今期も続投中', 
     insights: {
       plan: '【序盤】2Tフォロワーから連携を稼ぐ。\n【中盤】5T目カゲミツ進化で盤面を制圧し、進化回数を稼ぐ。\n【リーサル】7〜8T目にオクトーと疾走フォロワーで一気に20点削り切る。',
       mulligan: '【共通】2コスフォロワー最優先確保\n【先攻】テンポ重視で1・2・3の動きをキープ\n【後攻】除去札・進化時多面処理できるフォロワーを単キープ',
       cards: '【採用調整】\n・低コスト除去スペル: 2枚→3枚 (アグロ対面への回答)\n・重いフィニッシャー: 3枚→2枚 (手札事故防止)',
       review: '先攻時の安定感は非常に高いが、後攻でアグロ相手に押し切られる試合があった。序盤の受け札をもう少し厚くするか要検討。'
     },
-    createdAt: Date.now() - 3600000 * 24 * 10 
+    createdAt: Date.now() - 3600000 * 24 * 20 
   },
   { 
     id: 'deck-2', 
     name: '秘術ウィッチ', 
     class: 'ウィッチ', 
     status: 'active', 
-    notes: 'ノーマン・パメラ軸', 
+    notes: '新カードノーマン採用で打点強化', 
     insights: {
-      plan: '【序盤】土の印を供給しつつ手札を整える。\n【中盤】スタック数を管理しながらノーマン等の守護で受ける。\n【リーサル】紅蓮の魔術＋パメラの打点でバーストダメージ。',
-      mulligan: '【共通】土の魔導士・印供給カード\n【先攻】マナリアの秘術\n【後攻】盤面干渉札',
-      cards: '・新カード採用で打点力アップ。守護貫通の手段が課題。',
-      review: '守護ビショップ対面で打点が届かない場面があった。変成等の消滅・除去札の枚数を増やすべきか。'
+      plan: '土のスタック管理とノーマンの守護で中盤を耐え、終盤に紅蓮の魔術等でバースト。',
+      mulligan: '土の印供給札を最優先キープ。後攻は除去札もセット。',
+      cards: 'ノーマン3枚必須。盤面除去札の枚数を微調整中。',
+      review: 'スタック切れを起こさないプレイングが最重要。'
     },
-    createdAt: Date.now() - 3600000 * 24 * 5 
+    createdAt: Date.now() - 3600000 * 24 * 15 
   },
   { 
     id: 'deck-3', 
-    name: 'マガキエルフ', 
-    class: 'エルフ', 
-    status: 'active', 
-    notes: 'バウンス打点管理', 
-    insights: { plan: '', mulligan: '', cards: '', review: '' },
-    createdAt: Date.now() - 3600000 * 24 * 3 
-  },
-  { 
-    id: 'deck-4', 
     name: '旧・結晶ビショップ', 
     class: 'ビショップ', 
     status: 'archived', 
-    notes: '【スタン落ち】スカルフェイン落ちのため保管庫へ', 
+    notes: '【スタン落ち】スカルフェイン落ちのため保管庫へ移動', 
     insights: {
       plan: '結晶5回達成でスカルフェイン早期着地',
       mulligan: 'スカルフェイン全力マリガン',
       cards: 'スタン落ちのため現行ローテでは使用不可',
       review: '前環境最強の一角だったがキーカードがスタン落ちしたため保管庫へ移行。'
     },
-    createdAt: Date.now() - 3600000 * 24 * 40 
+    createdAt: Date.now() - 3600000 * 24 * 80 
   }
 ];
 
@@ -87,8 +80,8 @@ let seasons = [];
 let currentSeasonId = '';
 let myDecks = [];
 let matches = [];
-let deletedOppDecks = []; // Array of "ClassName___DeckName"
-let customOppDecks = [];  // Array of { class: 'ロイヤル', name: 'xxx' }
+let deletedOppDecks = [];
+let customOppDecks = [];
 let selectedTurn = '先攻';
 let selectedResult = 'WIN';
 let selectedOppClass = 'ロイヤル';
@@ -97,6 +90,12 @@ let deckSubtab = 'my-decks';  // 'my-decks' or 'opp-decks'
 let oppDeckManageClassFilter = 'ALL';
 let shareChartInstance = null;
 let winrateChartInstance = null;
+
+// State for Matchup Notes Drilldown Modal
+let currentMuMatches = [];
+let currentMuFilter = 'ALL';
+let currentMuOppClass = '';
+let currentMuOppDeckName = '';
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
@@ -108,6 +107,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSeasonManagement();
   setupDeckNotesManagement();
   setupOppDeckManagement();
+  setupMatchupModal();
   setupFiltersAndSearch();
   setupDataManagement();
   setupQuickMemoTags();
@@ -118,7 +118,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load and Migrate Data
 function loadData() {
-  // 1. Seasons
   const savedSeasons = localStorage.getItem(STORAGE_SEASONS_KEY);
   if (savedSeasons) {
     try {
@@ -137,7 +136,6 @@ function loadData() {
     localStorage.setItem(STORAGE_CURRENT_SEASON_KEY, currentSeasonId);
   }
 
-  // 2. Decks
   const savedDecks = localStorage.getItem(STORAGE_DECKS_KEY) || localStorage.getItem('sv_analyzer_decks_v1');
   if (savedDecks) {
     try {
@@ -161,7 +159,6 @@ function loadData() {
     saveDecks();
   }
 
-  // 3. Matches
   const savedMatches = localStorage.getItem(STORAGE_MATCHES_KEY) || localStorage.getItem('sv_analyzer_matches_v1');
   if (savedMatches) {
     try {
@@ -174,7 +171,6 @@ function loadData() {
     }
   }
 
-  // 4. Deleted and Custom Opponent Decks
   const savedDeletedOppDecks = localStorage.getItem(STORAGE_DELETED_OPP_DECKS_KEY);
   if (savedDeletedOppDecks) {
     try {
@@ -194,25 +190,11 @@ function loadData() {
   }
 }
 
-function saveSeasons() {
-  localStorage.setItem(STORAGE_SEASONS_KEY, JSON.stringify(seasons));
-}
-
-function saveDecks() {
-  localStorage.setItem(STORAGE_DECKS_KEY, JSON.stringify(myDecks));
-}
-
-function saveMatches() {
-  localStorage.setItem(STORAGE_MATCHES_KEY, JSON.stringify(matches));
-}
-
-function saveDeletedOppDecks() {
-  localStorage.setItem(STORAGE_DELETED_OPP_DECKS_KEY, JSON.stringify(deletedOppDecks));
-}
-
-function saveCustomOppDecks() {
-  localStorage.setItem(STORAGE_CUSTOM_OPP_DECKS_KEY, JSON.stringify(customOppDecks));
-}
+function saveSeasons() { localStorage.setItem(STORAGE_SEASONS_KEY, JSON.stringify(seasons)); }
+function saveDecks() { localStorage.setItem(STORAGE_DECKS_KEY, JSON.stringify(myDecks)); }
+function saveMatches() { localStorage.setItem(STORAGE_MATCHES_KEY, JSON.stringify(matches)); }
+function saveDeletedOppDecks() { localStorage.setItem(STORAGE_DELETED_OPP_DECKS_KEY, JSON.stringify(deletedOppDecks)); }
+function saveCustomOppDecks() { localStorage.setItem(STORAGE_CUSTOM_OPP_DECKS_KEY, JSON.stringify(customOppDecks)); }
 
 // Season Management Setup
 function setupSeasonManagement() {
@@ -228,15 +210,9 @@ function setupSeasonManagement() {
     lucide.createIcons();
   });
 
-  analyticsSeasonFilter.addEventListener('change', () => {
-    renderAnalytics();
-  });
+  analyticsSeasonFilter.addEventListener('change', () => renderAnalytics());
+  historySeasonFilter.addEventListener('change', () => renderHistory());
 
-  historySeasonFilter.addEventListener('change', () => {
-    renderHistory();
-  });
-
-  // Modal: New Season
   const newSeasonModal = document.getElementById('new-season-modal');
   const btnOpenNewSeason = document.getElementById('btn-open-new-season');
   const btnCloseNewSeasonModal = document.getElementById('btn-close-new-season-modal');
@@ -303,11 +279,7 @@ function handleCreateNewSeason() {
   }
 
   const newSeasonId = 'season-' + Date.now();
-  const newSeason = {
-    id: newSeasonId,
-    name: name,
-    createdAt: Date.now()
-  };
+  const newSeason = { id: newSeasonId, name: name, createdAt: Date.now() };
 
   seasons.unshift(newSeason);
   currentSeasonId = newSeasonId;
@@ -350,9 +322,7 @@ function setupDeckNotesManagement() {
     const deck = myDecks.find(d => d.id === deckId);
     if (!deck) return;
 
-    if (!deck.insights) {
-      deck.insights = {};
-    }
+    if (!deck.insights) deck.insights = {};
 
     deck.insights.plan = document.getElementById('deck-note-plan').value.trim();
     deck.insights.mulligan = document.getElementById('deck-note-mulligan').value.trim();
@@ -379,17 +349,12 @@ function setupDeckNotesManagement() {
       const sections = ['plan', 'mulligan', 'cards', 'review'];
       
       if (target === 'dnote-all') {
-        sections.forEach(s => {
-          document.getElementById(`section-dnote-${s}`).classList.remove('hidden');
-        });
+        sections.forEach(s => document.getElementById(`section-dnote-${s}`).classList.remove('hidden'));
       } else {
         sections.forEach(s => {
           const el = document.getElementById(`section-dnote-${s}`);
-          if (`dnote-${s}` === target) {
-            el.classList.remove('hidden');
-          } else {
-            el.classList.add('hidden');
-          }
+          if (`dnote-${s}` === target) el.classList.remove('hidden');
+          else el.classList.add('hidden');
         });
       }
     });
@@ -400,11 +365,8 @@ function setupDeckNotesManagement() {
       const fieldId = btn.dataset.field;
       const tpl = btn.dataset.tpl.replace(/\\n/g, '\n');
       const textarea = document.getElementById(fieldId);
-      if (textarea.value) {
-        textarea.value += '\n\n' + tpl;
-      } else {
-        textarea.value = tpl;
-      }
+      if (textarea.value) textarea.value += '\n\n' + tpl;
+      else textarea.value = tpl;
       textarea.focus();
     });
   });
@@ -429,11 +391,8 @@ function openDeckNotesModal(deckId) {
   document.getElementById('deck-note-review').value = insights.review || '';
 
   document.querySelectorAll('.deck-note-tab').forEach((t, idx) => {
-    if (idx === 0) {
-      t.className = 'deck-note-tab active pb-2 px-1 border-b-2 border-cyan-400 text-cyan-400 font-bold';
-    } else {
-      t.className = 'deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium';
-    }
+    if (idx === 0) t.className = 'deck-note-tab active pb-2 px-1 border-b-2 border-cyan-400 text-cyan-400 font-bold';
+    else t.className = 'deck-note-tab pb-2 px-1 border-b-2 border-transparent text-gray-400 hover:text-white font-medium';
   });
   ['plan', 'mulligan', 'cards', 'review'].forEach(s => {
     document.getElementById(`section-dnote-${s}`).classList.remove('hidden');
@@ -467,7 +426,6 @@ function setupOppDeckManagement() {
     renderOppDecksManagement();
   });
 
-  // Quick link from record tab
   document.getElementById('btn-quick-manage-opp-decks').addEventListener('click', () => {
     switchTab('tab-decks');
     subtabOppDecks.click();
@@ -476,7 +434,6 @@ function setupOppDeckManagement() {
     renderOppDecksManagement();
   });
 
-  // Populate Add Opp Deck Class dropdown & Filter
   const addClassSelect = document.getElementById('add-opp-deck-class');
   const filterSelect = document.getElementById('opp-deck-manage-class-filter');
   addClassSelect.innerHTML = '';
@@ -499,14 +456,12 @@ function setupOppDeckManagement() {
     renderOppDecksManagement();
   });
 
-  // Add custom opponent deck
   document.getElementById('btn-add-opp-deck').addEventListener('click', () => {
     const cls = addClassSelect.value;
     const nameInput = document.getElementById('add-opp-deck-name');
     const name = nameInput.value.trim();
     if (!name) return;
 
-    // Un-delete if previously deleted
     const key = `${cls}___${name}`;
     deletedOppDecks = deletedOppDecks.filter(k => k !== key);
     saveDeletedOppDecks();
@@ -523,16 +478,13 @@ function setupOppDeckManagement() {
   });
 }
 
-// Render Opponent Decks Management Grid in Tab 4
 function renderOppDecksManagement() {
   const container = document.getElementById('opp-decks-manage-grid');
   const emptyMsg = document.getElementById('opp-decks-empty-msg');
   container.innerHTML = '';
 
-  // Collect all known opponent decks across all classes
-  const oppDeckMap = {}; // key: "ClassName___DeckName" -> { class, name, count }
+  const oppDeckMap = {};
 
-  // 1. From default suggestions
   const defaults = {
     'エルフ': ['マガキエルフ', 'カステルエルフ', 'テンポエルフ', 'リノエルフ'],
     'ロイヤル': ['進化ロイヤル', '連携ロイヤル', '財宝ロイヤル', '指揮官ロイヤル'],
@@ -554,7 +506,6 @@ function renderOppDecksManagement() {
     });
   });
 
-  // 2. From custom added opp decks
   customOppDecks.forEach(d => {
     const key = `${d.class}___${d.name}`;
     if (!deletedOppDecks.includes(key)) {
@@ -562,14 +513,11 @@ function renderOppDecksManagement() {
     }
   });
 
-  // 3. From match history
   matches.forEach(m => {
     if (m.oppClass && m.oppDeckName) {
       const key = `${m.oppClass}___${m.oppDeckName}`;
       if (!deletedOppDecks.includes(key)) {
-        if (!oppDeckMap[key]) {
-          oppDeckMap[key] = { class: m.oppClass, name: m.oppDeckName, count: 0 };
-        }
+        if (!oppDeckMap[key]) oppDeckMap[key] = { class: m.oppClass, name: m.oppDeckName, count: 0 };
         oppDeckMap[key].count += 1;
       }
     }
@@ -580,7 +528,6 @@ function renderOppDecksManagement() {
     list = list.filter(d => d.class === oppDeckManageClassFilter);
   }
 
-  // Sort by count desc, then name
   list.sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'ja'));
 
   if (list.length === 0) {
@@ -603,11 +550,9 @@ function renderOppDecksManagement() {
       </div>
 
       <div class="flex items-center gap-1 flex-shrink-0">
-        <!-- Rename Button -->
-        <button type="button" class="btn-rename-opp-deck p-1.5 rounded-lg bg-[#222c3f] hover:bg-[#2c3952] text-gray-300 border border-[#344460] transition" data-class="${d.class}" data-name="${escapeHtml(d.name)}" title="名前を変更（過去の対戦ログも一括修正）">
+        <button type="button" class="btn-rename-opp-deck p-1.5 rounded-lg bg-[#222c3f] hover:bg-[#2c3952] text-gray-300 border border-[#344460] transition" data-class="${d.class}" data-name="${escapeHtml(d.name)}" title="名前を変更（過去ログ一括更新）">
           <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
         </button>
-        <!-- Delete Button -->
         <button type="button" class="btn-delete-opp-deck p-1.5 rounded-lg bg-[#222c3f] hover:bg-rose-950/70 text-gray-400 hover:text-rose-400 border border-[#344460] hover:border-rose-800 transition" data-class="${d.class}" data-name="${escapeHtml(d.name)}" title="この相手デッキを削除">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
         </button>
@@ -617,29 +562,19 @@ function renderOppDecksManagement() {
     container.appendChild(card);
   });
 
-  // Action listeners
   container.querySelectorAll('.btn-rename-opp-deck').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const cls = btn.dataset.class;
-      const oldName = btn.dataset.name;
-      handleRenameOpponentDeck(cls, oldName);
-    });
+    btn.addEventListener('click', () => handleRenameOpponentDeck(btn.dataset.class, btn.dataset.name));
   });
 
   container.querySelectorAll('.btn-delete-opp-deck').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const cls = btn.dataset.class;
-      const name = btn.dataset.name;
-      confirmDeleteOpponentDeck(cls, name);
-    });
+    btn.addEventListener('click', () => confirmDeleteOpponentDeck(btn.dataset.class, btn.dataset.name));
   });
 
   lucide.createIcons();
 }
 
-// Rename opponent deck across past matches & custom list
 function handleRenameOpponentDeck(className, oldName) {
-  const newName = prompt(`相手デッキ「[${className}] ${oldName}」の新しい名前を入力してください:\n（過去の対戦ログの表記も一括で更新されます）`, oldName);
+  const newName = prompt(`相手デッキ「[${className}] ${oldName}」の新しい名前を入力してください:\n（過去の対戦ログも一括で修正されます）`, oldName);
   if (!newName || newName.trim() === '' || newName.trim() === oldName) return;
 
   const trimmed = newName.trim();
@@ -652,14 +587,10 @@ function handleRenameOpponentDeck(className, oldName) {
     }
   });
 
-  // Update in custom list if exists
   customOppDecks.forEach(d => {
-    if (d.class === className && d.name === oldName) {
-      d.name = trimmed;
-    }
+    if (d.class === className && d.name === oldName) d.name = trimmed;
   });
 
-  // Ensure new name is not in deleted list
   const newKey = `${className}___${trimmed}`;
   deletedOppDecks = deletedOppDecks.filter(k => k !== newKey);
 
@@ -672,7 +603,6 @@ function handleRenameOpponentDeck(className, oldName) {
   alert(`「${oldName}」を「${trimmed}」に変更しました！（過去ログ${affectedMatches}件を更新）`);
 }
 
-// Delete opponent deck with confirmation
 function confirmDeleteOpponentDeck(className, deckName) {
   const matchCount = matches.filter(m => m.oppClass === className && m.oppDeckName === deckName).length;
   const key = `${className}___${deckName}`;
@@ -687,7 +617,6 @@ function confirmDeleteOpponentDeck(className, deckName) {
 
     if (!choice) return;
 
-    // Clean matches oppDeckName to avoid keeping the deleted name
     matches.forEach(m => {
       if (m.oppClass === className && m.oppDeckName === deckName) {
         m.oppDeckName = `${className}不明`;
@@ -700,13 +629,11 @@ function confirmDeleteOpponentDeck(className, deckName) {
     }
   }
 
-  // Add to deletedOppDecks list to prevent it from ever showing in suggestions
   if (!deletedOppDecks.includes(key)) {
     deletedOppDecks.push(key);
     saveDeletedOppDecks();
   }
 
-  // Remove from custom list
   customOppDecks = customOppDecks.filter(d => !(d.class === className && d.name === deckName));
   saveCustomOppDecks();
 
@@ -714,7 +641,167 @@ function confirmDeleteOpponentDeck(className, deckName) {
   lucide.createIcons();
 }
 
-// Render Season Selectors across the app
+// Matchup Drilldown Notes Modal Setup
+function setupMatchupModal() {
+  const modal = document.getElementById('matchup-notes-modal');
+  const btnClose = document.getElementById('btn-close-matchup-modal');
+  const btnDone = document.getElementById('btn-done-matchup-modal');
+
+  btnClose.addEventListener('click', () => modal.classList.add('hidden'));
+  btnDone.addEventListener('click', () => modal.classList.add('hidden'));
+
+  document.querySelectorAll('.mu-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.mu-filter-btn').forEach(b => {
+        b.className = 'mu-filter-btn px-3 py-1.5 rounded-lg bg-[#182030] text-gray-300 hover:text-white font-medium border border-[#29354a] transition whitespace-nowrap';
+      });
+      btn.className = 'mu-filter-btn active px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-bold transition whitespace-nowrap';
+
+      currentMuFilter = btn.dataset.filter;
+      renderMatchupModalList();
+    });
+  });
+}
+
+function openMatchupNotesModal(oppClass, oppDeckName) {
+  const modal = document.getElementById('matchup-notes-modal');
+  const filterSeasonVal = document.getElementById('analytics-season-filter').value;
+  const filterDeckId = document.getElementById('analytics-deck-filter').value;
+
+  currentMuOppClass = oppClass;
+  currentMuOppDeckName = oppDeckName;
+
+  let list = matches.filter(m => m.oppClass === oppClass && m.oppDeckName === oppDeckName);
+  if (filterSeasonVal !== 'ALL') list = list.filter(m => m.seasonId === filterSeasonVal);
+  if (filterDeckId !== 'ALL') list = list.filter(m => m.myDeckId === filterDeckId);
+
+  currentMuMatches = list;
+
+  const currentDeck = myDecks.find(d => d.id === filterDeckId);
+  const myDeckName = filterDeckId === 'ALL' ? '全自デッキ総合' : (currentDeck?.name || '自デッキ');
+  document.getElementById('mu-modal-my-deck').textContent = myDeckName;
+  document.getElementById('mu-modal-opp-deck').textContent = oppDeckName;
+
+  const oppBadge = document.getElementById('mu-modal-opp-badge');
+  oppBadge.textContent = oppClass;
+  oppBadge.className = `px-2 py-0.5 rounded text-xs border ${getClassBadge(oppClass)}`;
+
+  const total = list.length;
+  const wins = list.filter(m => m.result === 'WIN').length;
+  const losses = total - wins;
+  const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
+
+  const firstTurn = list.filter(m => m.turn === '先攻');
+  const firstWins = firstTurn.filter(m => m.result === 'WIN').length;
+  const firstRate = firstTurn.length > 0 ? Math.round((firstWins / firstTurn.length) * 100) : 0;
+
+  const secondTurn = list.filter(m => m.turn === '後攻');
+  const secondWins = secondTurn.filter(m => m.result === 'WIN').length;
+  const secondRate = secondTurn.length > 0 ? Math.round((secondWins / secondTurn.length) * 100) : 0;
+
+  document.getElementById('mu-modal-stats-summary').innerHTML = `
+    <span>通算: <strong class="text-white">${total}</strong> 戦 (<strong class="text-emerald-400 font-bold">${wins}</strong>W - <strong class="text-rose-400 font-bold">${losses}</strong>L)</span>
+    <span class="text-gray-500">|</span>
+    <span>勝率: <strong class="text-cyan-400 font-bold">${winRate}%</strong></span>
+    <span class="text-gray-500">|</span>
+    <span>先攻: <strong class="text-amber-400 font-bold">${firstRate}%</strong> (${firstWins}/${firstTurn.length})</span>
+    <span class="text-gray-500">|</span>
+    <span>後攻: <strong class="text-indigo-400 font-bold">${secondRate}%</strong> (${secondWins}/${secondTurn.length})</span>
+  `;
+
+  document.getElementById('mu-count-all').textContent = total;
+  document.getElementById('mu-count-lose').textContent = losses;
+  document.getElementById('mu-count-win').textContent = wins;
+  document.getElementById('mu-count-first').textContent = firstTurn.length;
+  document.getElementById('mu-count-second').textContent = secondTurn.length;
+
+  currentMuFilter = 'ALL';
+  document.querySelectorAll('.mu-filter-btn').forEach((b, idx) => {
+    if (idx === 0) b.className = 'mu-filter-btn active px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-bold transition whitespace-nowrap';
+    else b.className = 'mu-filter-btn px-3 py-1.5 rounded-lg bg-[#182030] text-gray-300 hover:text-white font-medium border border-[#29354a] transition whitespace-nowrap';
+  });
+
+  renderMatchupModalList();
+  modal.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function renderMatchupModalList() {
+  const container = document.getElementById('mu-matches-list');
+  const emptyMsg = document.getElementById('mu-matches-empty-msg');
+  container.innerHTML = '';
+
+  let filtered = currentMuMatches;
+  if (currentMuFilter === 'LOSE') filtered = filtered.filter(m => m.result === 'LOSE');
+  else if (currentMuFilter === 'WIN') filtered = filtered.filter(m => m.result === 'WIN');
+  else if (currentMuFilter === 'FIRST') filtered = filtered.filter(m => m.turn === '先攻');
+  else if (currentMuFilter === 'SECOND') filtered = filtered.filter(m => m.turn === '後攻');
+
+  if (filtered.length === 0) {
+    emptyMsg.classList.remove('hidden');
+    return;
+  }
+  emptyMsg.classList.add('hidden');
+
+  filtered.forEach(m => {
+    const isWin = m.result === 'WIN';
+    const card = document.createElement('div');
+    card.className = `p-3.5 bg-[#182030] rounded-xl border ${isWin ? 'border-emerald-900/50 hover:border-emerald-700/60' : 'border-rose-900/50 hover:border-rose-700/60'} space-y-2.5 transition`;
+
+    card.innerHTML = `
+      <div class="flex items-center justify-between text-xs pb-1.5 border-b border-[#243144]">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="px-2 py-0.5 rounded text-xs font-black ${isWin ? 'bg-emerald-950/90 text-emerald-400 border border-emerald-700' : 'bg-rose-950/90 text-rose-400 border border-rose-700'}">
+            ${m.result}
+          </span>
+          <span class="px-2 py-0.5 rounded text-[11px] font-bold ${m.turn === '先攻' ? 'bg-amber-950/50 text-amber-300 border border-amber-800/40' : 'bg-indigo-950/50 text-indigo-300 border border-indigo-800/40'}">
+            ${m.turn}
+          </span>
+          <span class="text-gray-300 font-medium">使用自デッキ: <strong class="text-cyan-300">${escapeHtml(m.myDeckName)}</strong></span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] text-gray-500">${formatRelativeDate(m.createdAt)}</span>
+          <button type="button" class="btn-edit-memo-from-mu p-1 text-cyan-400 hover:text-cyan-200 rounded hover:bg-[#202c40] transition" data-id="${m.id}" title="メモを編集">
+            <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+          </button>
+        </div>
+      </div>
+
+      ${m.memo ? `
+        <div class="bg-[#101622] p-2.5 rounded-lg border border-[#222d3e] text-xs text-gray-200 whitespace-pre-wrap leading-relaxed">
+          <div class="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 flex items-center gap-1">
+            <i data-lucide="message-square" class="w-3 h-3 text-cyan-400"></i>
+            対戦メモ・分析・反省
+          </div>
+          ${escapeHtml(m.memo)}
+        </div>
+      ` : `
+        <div class="flex items-center justify-between bg-[#101622] p-2.5 rounded-lg border border-[#222d3e] text-xs text-gray-500 italic">
+          <span>対戦メモはまだ記録されていません</span>
+          <button type="button" class="btn-edit-memo-from-mu text-[11px] text-cyan-400 hover:underline not-italic font-medium flex items-center gap-1" data-id="${m.id}">
+            <i data-lucide="edit-3" class="w-3 h-3"></i>
+            メモを追記する
+          </button>
+        </div>
+      `}
+    `;
+
+    container.appendChild(card);
+  });
+
+  container.querySelectorAll('.btn-edit-memo-from-mu').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openEditModal(btn.dataset.id, () => {
+        // Re-sync modal list after edit
+        openMatchupNotesModal(currentMuOppClass, currentMuOppDeckName);
+      });
+    });
+  });
+
+  lucide.createIcons();
+}
+
+// Render Season Selectors
 function renderSeasonSelectors() {
   const globalSelect = document.getElementById('global-season-select');
   const analyticsSeasonFilter = document.getElementById('analytics-season-filter');
@@ -722,9 +809,7 @@ function renderSeasonSelectors() {
   const badge = document.getElementById('record-current-season-badge');
 
   const currentSeason = seasons.find(s => s.id === currentSeasonId) || seasons[0];
-  if (badge && currentSeason) {
-    badge.textContent = currentSeason.name;
-  }
+  if (badge && currentSeason) badge.textContent = currentSeason.name;
 
   globalSelect.innerHTML = '';
   seasons.forEach(s => {
@@ -791,7 +876,7 @@ function setupClassSelector() {
   });
 }
 
-// Update Opponent Deck Suggestions (with instant "x" delete button on each chip)
+// Update Opponent Deck Suggestions
 function updateOpponentDeckSuggestions() {
   const container = document.getElementById('opp-deck-suggestions');
   container.innerHTML = '';
@@ -825,21 +910,19 @@ function updateOpponentDeckSuggestions() {
   const sortedAll = Object.keys(allCounts).sort((a, b) => allCounts[b] - allCounts[a]);
   const defaultList = defaults[selectedOppClass] || [];
 
-  // Merge unique and filter out deleted opponent decks
   const rawCombined = Array.from(new Set([...customForClass, ...sortedCurrent, ...sortedAll, ...defaultList]));
   const combined = rawCombined
     .filter(name => !deletedOppDecks.includes(`${selectedOppClass}___${name}`))
     .slice(0, 9);
 
   if (combined.length === 0) {
-    container.innerHTML = '<span class="text-xs text-gray-500 italic">候補なし（手動入力または「相手デッキ一覧・整理」から追加できます）</span>';
+    container.innerHTML = '<span class="text-xs text-gray-500 italic">候補なし（直接入力または「相手デッキ一覧・整理」から追加できます）</span>';
     return;
   }
 
   combined.forEach(deckName => {
     const isCurrentHot = (currentSeasonCounts[deckName] || 0) > 0;
     
-    // Chip Wrapper
     const chipWrapper = document.createElement('div');
     chipWrapper.className = `group inline-flex items-center rounded-lg border text-xs transition ${
       isCurrentHot 
@@ -847,7 +930,6 @@ function updateOpponentDeckSuggestions() {
         : 'bg-[#20293a] border-[#2e3b52] text-gray-300 hover:bg-[#28354c] hover:border-gray-500'
     }`;
 
-    // Deck Name Clickable Button
     const btnSelect = document.createElement('button');
     btnSelect.type = 'button';
     btnSelect.className = 'px-2.5 py-1 text-left flex items-center gap-1.5 focus:outline-none';
@@ -861,7 +943,6 @@ function updateOpponentDeckSuggestions() {
       input.focus();
     });
 
-    // Delete "x" button
     const btnDelete = document.createElement('button');
     btnDelete.type = 'button';
     btnDelete.className = 'px-1.5 py-1 text-gray-400 hover:text-rose-400 hover:bg-rose-950/60 rounded-r-lg transition border-l border-white/5';
@@ -923,11 +1004,8 @@ function setupQuickMemoTags() {
     tag.addEventListener('click', () => {
       const memoField = document.getElementById('match-memo');
       const text = tag.textContent.trim();
-      if (memoField.value) {
-        memoField.value += ` 【${text}】`;
-      } else {
-        memoField.value = `【${text}】 `;
-      }
+      if (memoField.value) memoField.value += ` 【${text}】`;
+      else memoField.value = `【${text}】 `;
       memoField.focus();
     });
   });
@@ -953,7 +1031,6 @@ function setupFormHandlers() {
     const currentMyDeck = myDecks.find(d => d.id === myDeckId);
     const myDeckName = currentMyDeck ? currentMyDeck.name : '不明なデッキ';
 
-    // If this opp deck was in deleted list, remove it from deleted list since user actively used it
     const key = `${selectedOppClass}___${oppDeckName}`;
     if (deletedOppDecks.includes(key)) {
       deletedOppDecks = deletedOppDecks.filter(k => k !== key);
@@ -1300,19 +1377,14 @@ function renderRecentMemos() {
   });
 }
 
-// Render Analytics Tab
+// Render Analytics Tab (Click on opponent deck name opens past memos drilldown!)
 function renderAnalytics() {
   const filterSeasonVal = document.getElementById('analytics-season-filter').value;
   const filterDeckId = document.getElementById('analytics-deck-filter').value;
 
   let targetMatches = matches;
-  if (filterSeasonVal !== 'ALL') {
-    targetMatches = targetMatches.filter(m => m.seasonId === filterSeasonVal);
-  }
-
-  if (filterDeckId !== 'ALL') {
-    targetMatches = targetMatches.filter(m => m.myDeckId === filterDeckId);
-  }
+  if (filterSeasonVal !== 'ALL') targetMatches = targetMatches.filter(m => m.seasonId === filterSeasonVal);
+  if (filterDeckId !== 'ALL') targetMatches = targetMatches.filter(m => m.myDeckId === filterDeckId);
 
   const total = targetMatches.length;
   const wins = targetMatches.filter(m => m.result === 'WIN').length;
@@ -1348,7 +1420,8 @@ function renderAnalytics() {
         firstTotal: 0,
         firstWins: 0,
         secondTotal: 0,
-        secondWins: 0
+        secondWins: 0,
+        memoCount: 0
       };
     }
     const mu = matchups[key];
@@ -1362,6 +1435,10 @@ function renderAnalytics() {
     } else {
       mu.secondTotal += 1;
       if (m.result === 'WIN') mu.secondWins += 1;
+    }
+
+    if (m.memo && m.memo.trim().length > 0) {
+      mu.memoCount += 1;
     }
   });
 
@@ -1390,9 +1467,18 @@ function renderAnalytics() {
       }
 
       const tr = document.createElement('tr');
-      tr.className = 'hover:bg-[#182030]/60 transition';
+      tr.className = 'hover:bg-[#182030]/80 transition group';
+      
       tr.innerHTML = `
-        <td class="py-3 px-4 font-semibold text-white">${escapeHtml(mu.oppDeckName)}</td>
+        <td class="py-3 px-4">
+          <button type="button" class="btn-open-matchup-memos text-left font-bold text-cyan-300 hover:text-cyan-100 flex items-center gap-2 group-hover:translate-x-0.5 transition" data-opp-class="${escapeHtml(mu.oppClass)}" data-opp-deck="${escapeHtml(mu.oppDeckName)}" title="クリックしてこの対面の過去メモ・反省を見る">
+            <span class="hover:underline">${escapeHtml(mu.oppDeckName)}</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded-full ${mu.memoCount > 0 ? 'bg-cyan-950/80 text-cyan-300 border border-cyan-700/60 font-bold' : 'bg-gray-800 text-gray-500 font-normal'} flex items-center gap-1" title="過去の対戦メモ (${mu.memoCount}件)">
+              <i data-lucide="message-square" class="w-3 h-3 ${mu.memoCount > 0 ? 'text-cyan-400' : 'text-gray-500'}"></i>
+              <span>${mu.memoCount}</span>
+            </span>
+          </button>
+        </td>
         <td class="py-3 px-3">
           <span class="px-2 py-0.5 rounded text-xs border ${getClassBadge(mu.oppClass)}">${mu.oppClass}</span>
         </td>
@@ -1413,7 +1499,15 @@ function renderAnalytics() {
     });
   }
 
+  // Attach event listener for clicking opponent deck name
+  tbody.querySelectorAll('.btn-open-matchup-memos').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openMatchupNotesModal(btn.dataset.oppClass, btn.dataset.oppDeck);
+    });
+  });
+
   renderAnalyticsCharts(targetMatches, matchupList);
+  lucide.createIcons();
 }
 
 // Chart.js Rendering
@@ -1776,7 +1870,7 @@ function renderDecksList() {
 }
 
 // Edit Modal Handling
-function openEditModal(matchId) {
+function openEditModal(matchId, callback) {
   const match = matches.find(m => m.id === matchId);
   if (!match) return;
 
@@ -1809,6 +1903,7 @@ function openEditModal(matchId) {
     modal.classList.add('hidden');
     renderAll();
     lucide.createIcons();
+    if (callback) callback();
   };
 
   document.getElementById('btn-cancel-edit').onclick = () => modal.classList.add('hidden');
@@ -1829,26 +1924,19 @@ function deleteMatch(matchId) {
 // Navigation Tabs
 function setupTabNavigation() {
   document.querySelectorAll('.nav-tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      switchTab(tab.dataset.tab);
-    });
+    tab.addEventListener('click', () => switchTab(tab.dataset.tab));
   });
 
   document.querySelectorAll('.nav-switch').forEach(btn => {
-    btn.addEventListener('click', () => {
-      switchTab(btn.dataset.target);
-    });
+    btn.addEventListener('click', () => switchTab(btn.dataset.target));
   });
 }
 
 function switchTab(tabId) {
   document.querySelectorAll('.nav-tab').forEach(t => {
     const isActive = t.dataset.tab === tabId;
-    if (isActive) {
-      t.className = 'nav-tab active flex items-center gap-2 pb-3 px-1 border-b-2 border-cyan-400 text-cyan-400 font-semibold whitespace-nowrap';
-    } else {
-      t.className = 'nav-tab flex items-center gap-2 pb-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition font-medium whitespace-nowrap';
-    }
+    if (isActive) t.className = 'nav-tab active flex items-center gap-2 pb-3 px-1 border-b-2 border-cyan-400 text-cyan-400 font-semibold whitespace-nowrap';
+    else t.className = 'nav-tab flex items-center gap-2 pb-3 px-1 border-b-2 border-transparent text-gray-400 hover:text-gray-200 transition font-medium whitespace-nowrap';
   });
 
   document.querySelectorAll('.tab-content').forEach(content => {
@@ -1861,9 +1949,7 @@ function switchTab(tabId) {
     }
   });
 
-  if (tabId === 'tab-analytics') {
-    renderAnalytics();
-  }
+  if (tabId === 'tab-analytics') renderAnalytics();
 
   lucide.createIcons();
 }
@@ -1873,10 +1959,7 @@ function setupFiltersAndSearch() {
   document.getElementById('history-search').addEventListener('input', renderHistory);
   document.getElementById('history-filter-result').addEventListener('change', renderHistory);
   document.getElementById('history-filter-deck').addEventListener('change', renderHistory);
-
-  document.getElementById('analytics-deck-filter').addEventListener('change', () => {
-    renderAnalytics();
-  });
+  document.getElementById('analytics-deck-filter').addEventListener('change', () => renderAnalytics());
 
   document.getElementById('btn-clear-all').addEventListener('click', () => {
     if (confirm('すべての対戦履歴とデッキデータを消去しますか？\n（事前に「保存」ボタンからバックアップを保存しておくことを推奨します）')) {
@@ -1896,7 +1979,7 @@ function setupFiltersAndSearch() {
 function setupDataManagement() {
   document.getElementById('btn-export').addEventListener('click', () => {
     const data = {
-      version: '2.2',
+      version: '2.3',
       exportedAt: new Date().toISOString(),
       seasons: seasons,
       currentSeasonId: currentSeasonId,
@@ -1915,9 +1998,7 @@ function setupDataManagement() {
   });
 
   const fileInput = document.getElementById('import-file-input');
-  document.getElementById('btn-import-trigger').addEventListener('click', () => {
-    fileInput.click();
-  });
+  document.getElementById('btn-import-trigger').addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -1962,9 +2043,7 @@ function setupDataManagement() {
     fileInput.value = '';
   });
 
-  document.getElementById('btn-add-sample').addEventListener('click', () => {
-    addSampleData();
-  });
+  document.getElementById('btn-add-sample').addEventListener('click', () => addSampleData());
 }
 
 function addSampleData() {
@@ -2029,7 +2108,7 @@ function addSampleData() {
       oppDeckName: '秘術ウィッチ',
       turn: '先攻',
       result: 'WIN',
-      memo: '新環境の秘術対面。カゲミツの突進で盤面維持し、7Tリーサル取れた。',
+      memo: 'カゲミツ進化で盤面を制圧し、相手の土の印の消化が遅れた隙に7Tオクトーから押し切り成功。',
       createdAt: Date.now() - 3600000 * 18
     },
     {
@@ -2042,7 +2121,7 @@ function addSampleData() {
       oppDeckName: '秘術ウィッチ',
       turn: '後攻',
       result: 'LOSE',
-      memo: '【マリガン事故】後攻で2コス引けず。相手のノーマン守護を抜けなかった。',
+      memo: '【マリガン事故】後攻で2コス引けず。7Tノーマンの守護裏を処理できずに紅蓮＋パメラでリーサル取られた。守護突破の札を構えておくべきだった。',
       createdAt: Date.now() - 3600000 * 12
     },
     {
@@ -2055,7 +2134,7 @@ function addSampleData() {
       oppDeckName: 'ランプドラゴン',
       turn: '先攻',
       result: 'WIN',
-      memo: 'ブースト前に顔を削り切った。新カードの採用が功を奏した。',
+      memo: 'PPブーストされる前に低コストを横展開して顔面を削り切った。新カードの採用が功を奏した。',
       createdAt: Date.now() - 3600000 * 8
     },
     {
@@ -2068,7 +2147,7 @@ function addSampleData() {
       oppDeckName: '進化ロイヤル',
       turn: '先攻',
       result: 'WIN',
-      memo: '【理想ムーブ】土の印が綺麗に回り完勝。',
+      memo: '【理想ムーブ】土の印が途切れず綺麗に回り完勝。ノーマンの守護が刺さった。',
       createdAt: Date.now() - 3600000 * 4
     },
     {
@@ -2102,7 +2181,7 @@ function addSampleData() {
 
   renderAll();
   lucide.createIcons();
-  alert('サンプルデータを投入しました！');
+  alert('サンプルデータを投入しました！\n「デッキ相性＆勝率分析」タブの表からデッキ名をクリックしてみてください。');
 }
 
 // Helpers

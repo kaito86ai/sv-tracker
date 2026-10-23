@@ -780,6 +780,65 @@
     </div>
   </div>
 
+  <!-- Matchup Notes Modal (Past match memos for specific matchup) -->
+  <div id="matchup-notes-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#131926] border border-[#2b3548] rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[92vh] overflow-y-auto">
+      
+      <!-- Modal Header -->
+      <div class="flex items-start justify-between pb-3 border-b border-[#232c3f] gap-3">
+        <div>
+          <div class="flex items-center gap-2 mb-1">
+            <span class="px-2 py-0.5 rounded text-xs bg-cyan-950/70 text-cyan-300 border border-cyan-800" id="mu-modal-my-deck">自デッキ</span>
+            <span class="text-xs font-bold text-gray-400">VS</span>
+            <span class="px-2 py-0.5 rounded text-xs border" id="mu-modal-opp-badge">クラス</span>
+            <h3 class="text-base font-bold text-white" id="mu-modal-opp-deck">相手デッキ名</h3>
+          </div>
+          <!-- Stats badge summary -->
+          <div class="text-xs text-gray-300 flex flex-wrap items-center gap-x-3 gap-y-1" id="mu-modal-stats-summary">
+            <!-- JSで成績表示 -->
+          </div>
+        </div>
+        <button id="btn-close-matchup-modal" class="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#202a3c] transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Filter Subtabs -->
+      <div class="flex border-b border-[#232c3f] gap-2 text-xs overflow-x-auto pb-1">
+        <button type="button" class="mu-filter-btn active px-3 py-1.5 rounded-lg bg-cyan-600 text-white font-bold transition whitespace-nowrap" data-filter="ALL">
+          すべての対戦 (<span id="mu-count-all">0</span>)
+        </button>
+        <button type="button" class="mu-filter-btn px-3 py-1.5 rounded-lg bg-[#182030] text-rose-300 hover:text-white font-medium border border-[#29354a] transition whitespace-nowrap" data-filter="LOSE">
+          💀 LOSE / 敗因メモ (<span id="mu-count-lose">0</span>)
+        </button>
+        <button type="button" class="mu-filter-btn px-3 py-1.5 rounded-lg bg-[#182030] text-emerald-300 hover:text-white font-medium border border-[#29354a] transition whitespace-nowrap" data-filter="WIN">
+          🏆 WIN / 勝因メモ (<span id="mu-count-win">0</span>)
+        </button>
+        <button type="button" class="mu-filter-btn px-3 py-1.5 rounded-lg bg-[#182030] text-amber-300 hover:text-white font-medium border border-[#29354a] transition whitespace-nowrap" data-filter="FIRST">
+          先攻 (<span id="mu-count-first">0</span>)
+        </button>
+        <button type="button" class="mu-filter-btn px-3 py-1.5 rounded-lg bg-[#182030] text-indigo-300 hover:text-white font-medium border border-[#29354a] transition whitespace-nowrap" data-filter="SECOND">
+          後攻 (<span id="mu-count-second">0</span>)
+        </button>
+      </div>
+
+      <!-- Memos Cards Container -->
+      <div id="mu-matches-list" class="space-y-3 pt-1">
+        <!-- JSで対戦カードを展開 -->
+      </div>
+
+      <div id="mu-matches-empty-msg" class="text-center py-8 text-gray-500 text-xs hidden">
+        該当するメモや対戦記録がありません。
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-[#232c3f]">
+        <button type="button" id="btn-done-matchup-modal" class="px-5 py-2 rounded-xl bg-[#1b2333] hover:bg-[#253248] text-gray-200 text-xs font-semibold transition">
+          閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>
